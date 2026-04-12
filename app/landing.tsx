@@ -245,12 +245,9 @@ export default function LandingScreen() {
   }
 
   function handleFreeAnalysis(freeEmail: string) {
-    const trimmed = freeEmail.trim().toLowerCase();
-    if (validateEmail(trimmed)) {
-      router.push(`/job-analysis?email=${encodeURIComponent(trimmed)}`);
-    } else {
-      router.push("/job-analysis");
-    }
+    const trimmed = (freeEmail || "").trim().toLowerCase();
+    const params = validateEmail(trimmed) ? `?email=${encodeURIComponent(trimmed)}` : "";
+    router.push(`/job-analysis${params}` as any);
   }
 
   return (
