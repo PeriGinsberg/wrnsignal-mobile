@@ -115,6 +115,14 @@ export default function TabLayout() {
       }}
     >
       <Tabs.Screen
+        name="tracker"
+        options={{
+          title: "Tracker",
+          tabBarIcon: ({ color }) => <TabIcon name="list-alt" color={color} />,
+          headerRight: () => <PlainHeaderRight />,
+        }}
+      />
+      <Tabs.Screen
         name="jobfit"
         options={{
           title: "Job Fit",
@@ -140,14 +148,6 @@ export default function TabLayout() {
         options={{
           title: "Network",
           tabBarIcon: ({ color }) => <TabIcon name="share-alt" color={color} />,
-        }}
-      />
-      <Tabs.Screen
-        name="tracker"
-        options={{
-          title: "Tracker",
-          tabBarIcon: ({ color }) => <TabIcon name="list-alt" color={color} />,
-          headerRight: () => <PlainHeaderRight />,
         }}
       />
       <Tabs.Screen

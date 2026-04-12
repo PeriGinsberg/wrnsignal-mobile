@@ -5,6 +5,7 @@ import * as SplashScreen from "expo-splash-screen";
 import { useEffect, useState } from "react";
 import { StatusBar } from "expo-status-bar";
 import "react-native-reanimated";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 import { AuthProvider, useAuth } from "@/lib/auth-context";
 import { JobProvider } from "@/lib/job-context";
@@ -44,37 +45,48 @@ export default function RootLayout() {
   );
 }
 
-/** Redirects to /login when not authenticated, to /(tabs) when authenticated. */
+/** Redirects based on auth state and whether the user has logged in before. */
 function AuthGate() {
   const { session, loading } = useAuth();
   const segments = useSegments();
   const router = useRouter();
   const [splashDone, setSplashDone] = useState(false);
+  const [hasLoggedInBefore, setHasLoggedInBefore] = useState<string | null>(null);
+  const [storageChecked, setStorageChecked] = useState(false);
+
+  useEffect(() => {
+    AsyncStorage.getItem("signal_has_logged_in").then((val) => {
+      setHasLoggedInBefore(val);
+      setStorageChecked(true);
+    });
+  }, []);
 
   useEffect(() => {
     if (loading) return;
     if (!splashDone) return;
+    if (!storageChecked) return;
 
-    // segments[0] === undefined means we're at the root index route.
-    // After splash dismisses we always land on index first, so we need
-    // to push the user to their real destination based on auth state.
     const firstSegment = segments[0];
     const onLoginScreen = firstSegment === "login";
-    const onTabs = firstSegment === "(tabs)";
+    const onLandingScreen = firstSegment === "landing";
     const onRootIndex = firstSegment === undefined;
 
     if (!session) {
-      // Not logged in — anywhere except /login should redirect to /login
-      if (!onLoginScreen) {
-        router.replace("/login");
+      // No session — route to landing (never logged in) or login (returning user)
+      if (!onLoginScreen && !onLandingScreen) {
+        if (hasLoggedInBefore === "true") {
+          router.replace("/login");
+        } else {
+          router.replace("/landing");
+        }
       }
     } else {
-      // Logged in — if on /login or the root /index screen, push to jobfit
-      if (onLoginScreen || onRootIndex) {
-        router.replace("/jobfit");
+      // Logged in — go to tracker tab
+      if (onLoginScreen || onLandingScreen || onRootIndex) {
+        router.replace("/(tabs)/tracker");
       }
     }
-  }, [session, loading, segments, splashDone]);
+  }, [session, loading, segments, splashDone, storageChecked, hasLoggedInBefore]);
 
   return (
     <>
@@ -82,6 +94,7 @@ function AuthGate() {
         <Stack.Screen name="index" />
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="login" />
+        <Stack.Screen name="landing" />
         <Stack.Screen
           name="instructions"
           options={{

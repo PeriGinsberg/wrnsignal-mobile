@@ -6,6 +6,7 @@ import {
   useCallback,
   type ReactNode,
 } from "react";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { supabase } from "./supabase";
 import type { Session } from "@supabase/supabase-js";
 
@@ -48,6 +49,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const { data: listener } = supabase.auth.onAuthStateChange(
       (_event, s) => {
         setSession(s);
+        if (s) {
+          AsyncStorage.setItem("signal_has_logged_in", "true");
+        }
       }
     );
 

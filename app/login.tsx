@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import {
   View,
   Text,
@@ -11,6 +11,8 @@ import {
   ActivityIndicator,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { router } from "expo-router";
 import { useAuth } from "@/lib/auth-context";
 import { palette, brand, type as typ, shared, space, radii } from "@/constants/theme";
 
@@ -24,7 +26,12 @@ export default function LoginScreen() {
   const [code, setCode] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [hasLoggedInBefore, setHasLoggedInBefore] = useState<string | null>(null);
   const codeInputRef = useRef<TextInput>(null);
+
+  useEffect(() => {
+    AsyncStorage.getItem("signal_has_logged_in").then(setHasLoggedInBefore);
+  }, []);
 
   async function handleSendCode() {
     const trimmed = email.trim().toLowerCase();
@@ -78,6 +85,16 @@ export default function LoginScreen() {
           contentContainerStyle={styles.scroll}
           keyboardShouldPersistTaps="handled"
         >
+          {/* Back link — only shown to first-time visitors who haven't logged in before */}
+          {hasLoggedInBefore !== "true" && (
+            <Pressable
+              onPress={() => router.push("/landing")}
+              style={({ pressed }) => [styles.backLink, pressed && { opacity: 0.6 }]}
+            >
+              <Text style={styles.backLinkText}>← Back</Text>
+            </Pressable>
+          )}
+
           {/* Logo */}
           <View style={styles.logoWrap}>
             <View style={styles.logoRow}>
@@ -94,10 +111,9 @@ export default function LoginScreen() {
           {step === "email" ? (
             /* ── Step 1: Enter email ─────────────────────────── */
             <>
-              <Text style={styles.headline}>Sign in to your account</Text>
+              <Text style={styles.headline}>Welcome back.</Text>
               <Text style={styles.subhead}>
-                Enter the email tied to your SIGNAL account. We'll send you a
-                code to sign in.
+                Enter your email and we'll send you a secure login link.
               </Text>
 
               <Text style={styles.label}>EMAIL ADDRESS</Text>
@@ -138,10 +154,6 @@ export default function LoginScreen() {
                 )}
               </Pressable>
 
-              <Text style={styles.footerNote}>
-                SIGNAL is for paid members only. Sign up at
-                workforcereadynow.com if you don't have an account yet.
-              </Text>
             </>
           ) : (
             /* ── Step 2: Enter code ──────────────────────────── */
@@ -256,13 +268,32 @@ const styles = StyleSheet.create({
     color: brand.blue, textTransform: "uppercase",
   },
 
+  // Back link
+  backLink: {
+    marginBottom: space.lg,
+    alignSelf: "flex-start",
+  },
+  backLinkText: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: palette.muted,
+  },
+
   // Content
   headline: {
-    ...typ.h2, color: palette.text, textAlign: "center", marginBottom: space.sm,
+    fontSize: 24,
+    fontWeight: "900",
+    fontStyle: "italic",
+    color: "#ffffff",
+    textAlign: "center",
+    marginBottom: space.sm,
   },
   subhead: {
-    ...typ.caption, color: palette.muted, textAlign: "center",
-    marginBottom: space["3xl"], lineHeight: 20,
+    fontSize: 14,
+    color: palette.muted,
+    textAlign: "center",
+    marginBottom: space["3xl"],
+    lineHeight: 20,
   },
   label: { ...typ.label, color: brand.blue, marginBottom: 6 },
 
@@ -282,12 +313,6 @@ const styles = StyleSheet.create({
   },
   btnDisabled: { opacity: 0.5 },
   primaryBtnText: { fontSize: 15, fontWeight: "900", color: "#04060F" },
-
-  // Footer
-  footerNote: {
-    ...typ.caption, color: palette.dim, textAlign: "center",
-    marginTop: space.xl, lineHeight: 20,
-  },
 
   // Sent card
   sentCard: {

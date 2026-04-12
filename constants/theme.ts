@@ -40,6 +40,14 @@ export const palette = {
   successBg: "rgba(74,222,128,0.10)",
   warning: "#FEB06A",
   warningBg: "rgba(254,176,106,0.08)",
+
+  tealBright: "#2DD4BF",
+  purple: "#7B5CF6",
+  coral: "#FF4F6D",
+  bgDeep: "#040D1A",
+  bgSurface: "#0A1828",
+  bgCard: "#071220",
+  borderSubtle: "#1E3A5F",
 } as const;
 
 /* ── Decision colors ───────────────────────────────────────── */
