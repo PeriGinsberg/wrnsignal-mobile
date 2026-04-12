@@ -95,6 +95,7 @@ function AuthGate() {
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="login" />
         <Stack.Screen name="landing" />
+        <Stack.Screen name="job-analysis" />
         <Stack.Screen
           name="instructions"
           options={{

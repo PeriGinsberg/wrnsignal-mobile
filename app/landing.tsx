@@ -246,9 +246,11 @@ export default function LandingScreen() {
 
   function handleFreeAnalysis(freeEmail: string) {
     const trimmed = freeEmail.trim().toLowerCase();
-    const base = `${API_BASE}/jobfit`;
-    const url = validateEmail(trimmed) ? `${base}?email=${encodeURIComponent(trimmed)}` : base;
-    Linking.openURL(url);
+    if (validateEmail(trimmed)) {
+      router.push(`/job-analysis?email=${encodeURIComponent(trimmed)}`);
+    } else {
+      router.push("/job-analysis");
+    }
   }
 
   return (
@@ -383,18 +385,6 @@ export default function LandingScreen() {
               pain="Generic advice doesn't account for your unique background."
               response="SIGNAL personalises every verdict to your profile — not a template."
             />
-          </View>
-
-          {/* ── FOUNDER QUOTE ────────────────────────────────────── */}
-          <View style={styles.founderSection}>
-            <View style={styles.founderAvatar}>
-              <Text style={styles.founderAvatarText}>PG</Text>
-            </View>
-            <Text style={styles.founderQuote}>
-              "I spent 30 years on the hiring side of the table. I built SIGNAL because I got tired of watching talented people miss opportunities for entirely preventable reasons."
-            </Text>
-            <Text style={styles.founderName}>— Paul G.</Text>
-            <Text style={styles.founderTitle}>Founder, SIGNAL · 30 years hiring experience</Text>
           </View>
 
           {/* ── BOTTOM CTA ──────────────────────────────────────── */}
@@ -735,49 +725,6 @@ const styles = StyleSheet.create({
     color: ORANGE,
     lineHeight: 20,
     fontWeight: "600",
-  },
-
-  // Founder
-  founderSection: {
-    marginTop: 40,
-    alignItems: "center",
-    paddingHorizontal: 4,
-  },
-  founderAvatar: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    backgroundColor: TEAL_DARK,
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 16,
-    borderWidth: 2,
-    borderColor: TEAL,
-  },
-  founderAvatarText: {
-    fontSize: 20,
-    fontWeight: "900",
-    color: "#ffffff",
-    letterSpacing: 0.5,
-  },
-  founderQuote: {
-    fontSize: 16,
-    fontStyle: "italic",
-    color: TEXT,
-    textAlign: "center",
-    lineHeight: 26,
-    marginBottom: 14,
-  },
-  founderName: {
-    fontSize: 14,
-    fontWeight: "900",
-    color: ORANGE,
-    marginBottom: 4,
-  },
-  founderTitle: {
-    fontSize: 12,
-    color: MUTED,
-    textAlign: "center",
   },
 
   // Pricing note
