@@ -69,11 +69,13 @@ function AuthGate() {
     const firstSegment = segments[0];
     const onLoginScreen = firstSegment === "login";
     const onLandingScreen = firstSegment === "landing";
+    const onJobAnalysis = firstSegment === "job-analysis";
     const onRootIndex = firstSegment === undefined;
 
     if (!session) {
       // No session — route to landing (never logged in) or login (returning user)
-      if (!onLoginScreen && !onLandingScreen) {
+      // Allow job-analysis without auth (it's the free tool)
+      if (!onLoginScreen && !onLandingScreen && !onJobAnalysis) {
         if (hasLoggedInBefore === "true") {
           router.replace("/login");
         } else {
