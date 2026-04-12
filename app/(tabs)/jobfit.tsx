@@ -159,7 +159,8 @@ export default function JobFitScreen() {
         job,
         jobContext.title,
         jobContext.company,
-        selectedPersonaId
+        selectedPersonaId,
+        jobUrl || null
       );
       setJobFitResult(result);
       // Keep whatever the server echoed back as the authoritative
@@ -257,8 +258,16 @@ export default function JobFitScreen() {
                 </View>
               )}
 
-              <Text style={s.urlOrDivider}>— or paste the description manually below —</Text>
             </View>
+
+            {/* OR divider */}
+            <View style={s.orDividerRow}>
+              <View style={s.orDividerLine} />
+              <Text style={s.orDividerText}>OR</Text>
+              <View style={s.orDividerLine} />
+            </View>
+
+            <Text style={s.pasteManualLabel}>PASTE MANUALLY</Text>
 
             {/* Persona selector */}
             {personas.length > 1 && (
@@ -668,6 +677,30 @@ const s = StyleSheet.create({
     color: "rgba(255,255,255,0.2)",
     textAlign: "center",
     marginTop: 12,
+  },
+  orDividerRow: {
+    flexDirection: "row" as const,
+    alignItems: "center" as const,
+    gap: 14,
+    marginVertical: 16,
+  },
+  orDividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: "rgba(255,255,255,0.08)",
+  },
+  orDividerText: {
+    fontSize: 13,
+    fontWeight: "900" as const,
+    color: "rgba(255,255,255,0.25)",
+    letterSpacing: 2,
+  },
+  pasteManualLabel: {
+    fontSize: 10,
+    fontWeight: "700" as const,
+    letterSpacing: 1.5,
+    color: brand.orange,
+    marginBottom: 8,
   },
 
   // LinkedIn helper

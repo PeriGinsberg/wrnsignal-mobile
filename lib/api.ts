@@ -266,6 +266,7 @@ export async function runJobFit(
   jobTitle: string,
   companyName: string,
   personaId?: string | null,
+  jobUrl?: string | null,
   onDebug?: (d: DebugInfo) => void
 ): Promise<JobFitResult> {
   const payload: Record<string, unknown> = {
@@ -274,6 +275,7 @@ export async function runJobFit(
     company_name: companyName.trim(),
   };
   if (personaId) payload.persona_id = personaId;
+  if (jobUrl?.trim()) payload.job_url = jobUrl.trim();
 
   const data = await postJsonWithDebug(
     `${API_BASE}/api/jobfit`,
@@ -484,8 +486,13 @@ export type Application = {
   company_name: string;
   job_title: string;
   location: string;
+  job_url: string | null;
+  application_location: string | null;
+  cover_letter_submitted: boolean;
+  referral: boolean;
   application_status: string;
   applied_date: string | null;
+  date_posted: string | null;
   interest_level: number;
   signal_decision: string;
   signal_score: number | null;
@@ -530,6 +537,23 @@ export async function updateApplication(
   const data = await res.json().catch(() => null);
   if (!res.ok) throw new Error(data?.error || "Application update failed.");
   return (data.application ?? data) as Application;
+}
+
+/**
+ * DELETE /api/applications/:id
+ */
+export async function deleteApplication(
+  accessToken: string,
+  id: string
+): Promise<void> {
+  const res = await fetch(`${API_BASE}/api/applications/${id}`, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => null);
+    throw new Error(data?.error || "Application delete failed.");
+  }
 }
 
 /* ── Interviews ─────────────────────────────────────────────── */
@@ -621,4 +645,49 @@ export async function createInterview(
   const data = await res.json().catch(() => null);
   if (!res.ok) throw new Error(data?.error || "Interview create failed.");
   return (data.interview ?? data) as Interview;
+}
+
+/**
+ * PUT /api/interviews/:id
+ */
+export async function updateInterview(
+  accessToken: string,
+  id: string,
+  fields: Partial<{
+    interview_stage: string;
+    interview_date: string;
+    status: string;
+    confidence_level: number;
+    notes: string;
+  }>
+): Promise<void> {
+  const res = await fetch(`${API_BASE}/api/interviews/${id}`, {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: JSON.stringify(fields),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => null);
+    throw new Error(data?.error || "Interview update failed.");
+  }
+}
+
+/**
+ * DELETE /api/interviews/:id
+ */
+export async function deleteInterview(
+  accessToken: string,
+  id: string
+): Promise<void> {
+  const res = await fetch(`${API_BASE}/api/interviews/${id}`, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => null);
+    throw new Error(data?.error || "Interview delete failed.");
+  }
 }

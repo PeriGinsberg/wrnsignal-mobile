@@ -6,6 +6,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { useAuth } from "@/lib/auth-context";
+import { useJob } from "@/lib/job-context";
 import { getApplications, type Application } from "@/lib/api";
 import { GradientBar } from "@/components/GradientBar";
 import { StatusPieChart } from "@/components/StatusPieChart";
@@ -33,11 +34,34 @@ const STATUS_STYLE: Record<string, { bg: string; color: string }> = {
 
 export default function TrackerScreen() {
   const { accessToken } = useAuth();
+  const { setJobFitResult, setJob, setJobContext } = useJob();
   const router = useRouter();
   const [apps, setApps] = useState<Application[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [activeFilter, setActiveFilter] = useState<string | null>(null);
+
+  async function handleSignalPress(app: Application) {
+    if (!accessToken || !app.jobfit_run_id) return;
+    try {
+      const res = await fetch(
+        `https://wrnsignal-api.vercel.app/api/runs/${app.jobfit_run_id}`,
+        { headers: { Authorization: `Bearer ${accessToken}` } }
+      );
+      if (!res.ok) throw new Error("fetch failed");
+      const data = await res.json();
+      if (data.jobfit) setJobFitResult(data.jobfit);
+      if (data.jobDescription) setJob(data.jobDescription);
+      if (data.jobTitle || data.companyName) {
+        setJobContext({ title: data.jobTitle || "", company: data.companyName || "" });
+      }
+      router.push("/(tabs)/jobfit");
+    } catch {
+      Linking.openURL(
+        `https://wrnsignal.workforcereadynow.com/signal/jobfit?run=${app.jobfit_run_id}`
+      );
+    }
+  }
 
   const load = useCallback(async () => {
     if (!accessToken) return;
@@ -145,6 +169,20 @@ export default function TrackerScreen() {
           />
         )}
 
+        {/* ── Run New Job CTA ───────────────────────────── */}
+        <Pressable
+          onPress={() => router.push("/(tabs)/jobfit")}
+          style={({ pressed }) => [s.newJobCta, pressed && { opacity: 0.85 }]}
+        >
+          <View style={s.newJobCtaInner}>
+            <View style={{ flex: 1 }}>
+              <Text style={s.newJobCtaLabel}>READY TO ANALYZE A NEW ROLE?</Text>
+              <Text style={s.newJobCtaTitle}>Run New Job →</Text>
+            </View>
+            <View style={s.newJobCtaDot} />
+          </View>
+        </Pressable>
+
         {/* ── Filtered Application List ──────────────────── */}
         {(() => {
           let filtered = apps;
@@ -199,9 +237,17 @@ export default function TrackerScreen() {
             {activeFilter ? "No applications match this filter." : "No applications tracked yet."}
           </Text>
           {!activeFilter && (
-            <Text style={s.emptyHint}>
-              Run Job Fit on a role and it will appear here automatically.
-            </Text>
+            <>
+              <Text style={s.emptyHint}>
+                Run Job Fit on a role and it will appear here automatically.
+              </Text>
+              <Pressable
+                onPress={() => router.push("/(tabs)/jobfit")}
+                style={({ pressed }) => [s.emptyBtn, pressed && { opacity: 0.85 }]}
+              >
+                <Text style={s.emptyBtnText}>Run New Job →</Text>
+              </Pressable>
+            </>
           )}
         </View>
       );
@@ -243,7 +289,7 @@ export default function TrackerScreen() {
                   <Pressable
                     onPress={(e) => {
                       e.stopPropagation?.();
-                      Linking.openURL(`https://wrnsignal.workforcereadynow.com/signal/jobfit?run=${app.jobfit_run_id}`);
+                      handleSignalPress(app);
                     }}
                     style={({ pressed }) => [s.signalLink, pressed && { opacity: 0.6 }]}
                   >
@@ -386,5 +432,52 @@ const s = StyleSheet.create({
     fontWeight: "900" as const,
     color: "#4ade80",
     letterSpacing: 0.5,
+  },
+  newJobCta: {
+    marginBottom: 16,
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    borderColor: "rgba(254,176,106,0.25)",
+    backgroundColor: "rgba(254,176,106,0.04)",
+    overflow: "hidden" as const,
+  },
+  newJobCtaInner: {
+    flexDirection: "row" as const,
+    alignItems: "center" as const,
+    padding: space.lg,
+    gap: 12,
+  },
+  newJobCtaLabel: {
+    fontSize: 9,
+    fontWeight: "900" as const,
+    letterSpacing: 1.5,
+    color: "rgba(254,176,106,0.6)",
+    marginBottom: 3,
+  },
+  newJobCtaTitle: {
+    fontSize: 16,
+    fontWeight: "900" as const,
+    fontStyle: "italic" as const,
+    color: brand.orange,
+  },
+  newJobCtaDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: brand.orange,
+  },
+  emptyBtn: {
+    marginTop: 14,
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: radii.md,
+    backgroundColor: brand.orange,
+    alignSelf: "center" as const,
+  },
+  emptyBtnText: {
+    fontSize: 14,
+    fontWeight: "900" as const,
+    fontStyle: "italic" as const,
+    color: "#04060F",
   },
 });

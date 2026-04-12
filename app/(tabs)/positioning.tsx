@@ -125,20 +125,20 @@ export default function PositioningScreen() {
             ) : null}
 
             {/* Bullet edits */}
-            {edits.length > 0 && (
-              <SectionCard
-                gradientColors={["#FEB06A", "#f97316", "#FEB06A"]}
-                icon="1"
-                iconBg="rgba(254,176,106,0.15)"
-                iconColor={brand.orange}
-                title="Optimize Key Bullets"
-                titleColor={brand.orange}
-                subtitle="Copy these rewrites into your resume"
-                badge={`${edits.length} edits`}
-                badgeBg="rgba(254,176,106,0.12)"
-                badgeColor={brand.orange}
-              >
-                {edits.map((b, i) => (
+            <SectionCard
+              gradientColors={["#FEB06A", "#f97316", "#FEB06A"]}
+              icon="1"
+              iconBg="rgba(254,176,106,0.15)"
+              iconColor={brand.orange}
+              title="Optimize Key Bullets"
+              titleColor={brand.orange}
+              subtitle={edits.length > 0 ? "Copy these rewrites into your resume" : "No changes needed"}
+              badge={edits.length > 0 ? `${edits.length} edits` : "✓"}
+              badgeBg="rgba(254,176,106,0.12)"
+              badgeColor={brand.orange}
+            >
+              {edits.length > 0 ? (
+                edits.map((b, i) => (
                   <View key={i} style={s.editCard}>
                     {/* Before */}
                     <View style={s.editHalf}>
@@ -159,9 +159,14 @@ export default function PositioningScreen() {
                       </View>
                     ) : null}
                   </View>
-                ))}
-              </SectionCard>
-            )}
+                ))
+              ) : (
+                <View style={{ padding: 16 }}>
+                  <Text style={{ fontSize: 14, fontWeight: "700", color: "#4ade80", marginBottom: 6 }}>Your resume bullets are aligned well for this job.</Text>
+                  <Text style={{ fontSize: 12, color: "rgba(255,255,255,0.5)", lineHeight: 18 }}>SIGNAL didn't find any bullets that need rewriting. Your experience descriptions already match what this role is looking for.</Text>
+                </View>
+              )}
+            </SectionCard>
 
             {/* Summary statement */}
             {summary && (
