@@ -7,6 +7,7 @@ import {
   Pressable,
   StyleSheet,
   ActivityIndicator,
+  Linking,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
@@ -57,6 +58,12 @@ export default function JobFitScreen() {
   const [error, setError] = useState<string | null>(null);
   const [personasLoading, setPersonasLoading] = useState(false);
   const [jobExpanded, setJobExpanded] = useState(false);
+  const [jobUrl, setJobUrl] = useState("");
+  const [urlLoading, setUrlLoading] = useState(false);
+  const [urlError, setUrlError] = useState("");
+  const [showLinkedInHelper, setShowLinkedInHelper] = useState(false);
+  const [linkedInPasteText, setLinkedInPasteText] = useState("");
+  const [linkedInPasteLoading, setLinkedInPasteLoading] = useState(false);
 
   // Load personas on mount
   useEffect(() => {
@@ -71,6 +78,73 @@ export default function JobFitScreen() {
       .catch(() => {})
       .finally(() => setPersonasLoading(false));
   }, [accessToken]);
+
+  const handleFetchUrl = async () => {
+    if (!jobUrl.trim()) return;
+    setUrlLoading(true);
+    setUrlError("");
+    setShowLinkedInHelper(false);
+    try {
+      const res = await fetch("https://wrnsignal-api.vercel.app/api/parse-job-url", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: jobUrl.trim() }),
+      });
+      const data = await res.json();
+      if (data.code === "LINKEDIN") {
+        setShowLinkedInHelper(true);
+        Linking.openURL(jobUrl.trim());
+        return;
+      }
+      if (data.error) {
+        setUrlError(data.error);
+        return;
+      }
+      if (data.companyName) setJobContext({ ...jobContext, company: data.companyName });
+      if (data.jobTitle) setJobContext({ ...jobContext, title: data.jobTitle });
+      if (data.companyName && data.jobTitle) setJobContext({ title: data.jobTitle, company: data.companyName });
+      if (data.jobDescription) setJob(data.jobDescription);
+      setJobUrl("");
+      setUrlError("");
+      setShowLinkedInHelper(false);
+    } catch {
+      setUrlError("Something went wrong. Please paste the job description manually.");
+    } finally {
+      setUrlLoading(false);
+    }
+  };
+
+  const handleLinkedInPaste = async () => {
+    if (!linkedInPasteText.trim() || linkedInPasteText.length < 50) {
+      setUrlError("Please paste more content — select the full page.");
+      return;
+    }
+    setLinkedInPasteLoading(true);
+    try {
+      const res = await fetch("https://wrnsignal-api.vercel.app/api/parse-job-text", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: linkedInPasteText.trim() }),
+      });
+      const data = await res.json();
+      if (data.error) {
+        setUrlError(data.error);
+        return;
+      }
+      if (data.companyName && data.jobTitle) setJobContext({ title: data.jobTitle, company: data.companyName });
+      else if (data.companyName) setJobContext({ ...jobContext, company: data.companyName });
+      else if (data.jobTitle) setJobContext({ ...jobContext, title: data.jobTitle });
+      if (data.jobDescription) setJob(data.jobDescription);
+      setShowLinkedInHelper(false);
+      setLinkedInPasteText("");
+      setJobUrl("");
+      setUrlError("");
+    } catch {
+      setUrlError("Extraction failed. Please paste the description manually below.");
+    } finally {
+      setLinkedInPasteLoading(false);
+    }
+  };
 
   const handleRun = useCallback(async () => {
     if (!job.trim()) { setError("Paste a job description first."); return; }
@@ -124,6 +198,68 @@ export default function JobFitScreen() {
         {/* ── Before results: full input area ────────────── */}
         {!hasResult && (
           <>
+            {/* URL Fetch */}
+            <View style={s.urlCard}>
+              <Text style={s.urlCardLabel}>PASTE JOB URL</Text>
+              <Text style={s.urlCardHint}>
+                LinkedIn, Indeed, Greenhouse, Lever, Handshake — paste any job URL
+              </Text>
+              <View style={s.urlRow}>
+                <TextInput
+                  style={s.urlInput}
+                  value={jobUrl}
+                  onChangeText={setJobUrl}
+                  onSubmitEditing={handleFetchUrl}
+                  placeholder="https://linkedin.com/jobs/view/..."
+                  placeholderTextColor={palette.dim}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  keyboardType="url"
+                  returnKeyType="go"
+                />
+                <Pressable
+                  onPress={handleFetchUrl}
+                  disabled={urlLoading}
+                  style={({ pressed }) => [s.urlBtn, urlLoading && s.urlBtnDisabled, pressed && { opacity: 0.8 }]}
+                >
+                  <Text style={[s.urlBtnText, urlLoading && s.urlBtnTextDisabled]}>
+                    {urlLoading ? "Fetching..." : "FETCH →"}
+                  </Text>
+                </Pressable>
+              </View>
+              {!!urlError && <Text style={s.urlError}>{urlError}</Text>}
+
+              {/* LinkedIn Helper */}
+              {showLinkedInHelper && (
+                <View style={s.linkedInBox}>
+                  <Text style={s.linkedInTitle}>⚡ LINKEDIN DETECTED</Text>
+                  <Text style={s.linkedInInstructions}>
+                    {"LinkedIn blocks automated access. Here's the fastest way:\n1. Your job is open in a new tab\n2. Press Cmd+A (Mac) or Ctrl+A (Windows) to select all\n3. Press Cmd+C / Ctrl+C to copy\n4. Paste everything below"}
+                  </Text>
+                  <TextInput
+                    style={s.linkedInTextArea}
+                    value={linkedInPasteText}
+                    onChangeText={setLinkedInPasteText}
+                    placeholder="Paste the full LinkedIn page here..."
+                    placeholderTextColor={palette.dim}
+                    multiline
+                    scrollEnabled
+                  />
+                  <Pressable
+                    onPress={handleLinkedInPaste}
+                    disabled={linkedInPasteLoading}
+                    style={({ pressed }) => [s.linkedInBtn, linkedInPasteLoading && s.linkedInBtnDisabled, pressed && { opacity: 0.8 }]}
+                  >
+                    <Text style={[s.linkedInBtnText, linkedInPasteLoading && s.linkedInBtnTextDisabled]}>
+                      {linkedInPasteLoading ? "Extracting..." : "EXTRACT FROM PASTE →"}
+                    </Text>
+                  </Pressable>
+                </View>
+              )}
+
+              <Text style={s.urlOrDivider}>— or paste the description manually below —</Text>
+            </View>
+
             {/* Persona selector */}
             {personas.length > 1 && (
               <View style={s.personaRow}>
@@ -465,6 +601,128 @@ function JobFitResults() {
 /* ── Styles ──────────────────────────────────────────────────── */
 
 const s = StyleSheet.create({
+  // URL fetch card
+  urlCard: {
+    backgroundColor: "#0D1F35",
+    borderWidth: 1,
+    borderColor: "rgba(255,149,0,0.2)",
+    borderRadius: radii.lg,
+    padding: space.lg,
+    marginBottom: space.md,
+  },
+  urlCardLabel: {
+    fontSize: 10,
+    fontWeight: "900",
+    letterSpacing: 1.5,
+    textTransform: "uppercase",
+    color: "#FF9500",
+    marginBottom: 4,
+  },
+  urlCardHint: {
+    fontSize: 12,
+    color: "rgba(255,255,255,0.4)",
+    marginBottom: 10,
+  },
+  urlRow: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  urlInput: {
+    flex: 1,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    backgroundColor: "rgba(255,255,255,0.06)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.12)",
+    borderRadius: radii.sm,
+    color: palette.text,
+    fontSize: 13,
+    fontFamily: undefined,
+  },
+  urlBtn: {
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    backgroundColor: "#FF9500",
+    borderRadius: radii.sm,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  urlBtnDisabled: {
+    backgroundColor: "#333",
+  },
+  urlBtnText: {
+    fontSize: 12,
+    fontWeight: "900",
+    color: "#0B0F1A",
+  },
+  urlBtnTextDisabled: {
+    color: "#999",
+  },
+  urlError: {
+    fontSize: 12,
+    color: "#FF3B5C",
+    marginTop: 8,
+  },
+  urlOrDivider: {
+    fontSize: 11,
+    color: "rgba(255,255,255,0.2)",
+    textAlign: "center",
+    marginTop: 12,
+  },
+
+  // LinkedIn helper
+  linkedInBox: {
+    backgroundColor: "rgba(255,214,10,0.04)",
+    borderWidth: 1,
+    borderColor: "rgba(255,214,10,0.25)",
+    borderRadius: 10,
+    padding: 14,
+    marginTop: 10,
+  },
+  linkedInTitle: {
+    fontSize: 12,
+    fontWeight: "900",
+    color: "#FFD60A",
+    marginBottom: 8,
+  },
+  linkedInInstructions: {
+    fontSize: 12,
+    color: "rgba(255,255,255,0.5)",
+    lineHeight: 18,
+    marginBottom: 10,
+  },
+  linkedInTextArea: {
+    minHeight: 100,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    backgroundColor: "rgba(255,255,255,0.06)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.12)",
+    borderRadius: radii.sm,
+    color: palette.text,
+    fontSize: 13,
+    textAlignVertical: "top",
+  },
+  linkedInBtn: {
+    marginTop: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    backgroundColor: "#FFD60A",
+    borderRadius: radii.sm,
+    alignItems: "center",
+  },
+  linkedInBtnDisabled: {
+    backgroundColor: "#333",
+  },
+  linkedInBtnText: {
+    fontSize: 12,
+    fontWeight: "900",
+    color: "#0B0F1A",
+  },
+  linkedInBtnTextDisabled: {
+    color: "#999",
+  },
+
   eyebrow: { ...typ.eyebrow, color: brand.orange, marginBottom: space.sm },
   fieldLabel: {
     fontSize: 12,
