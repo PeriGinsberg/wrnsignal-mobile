@@ -1,15 +1,20 @@
 import { useState, useEffect, useCallback } from "react";
 import {
   ScrollView, View, Text, TextInput, Pressable, StyleSheet,
-  ActivityIndicator, RefreshControl,
+  ActivityIndicator, RefreshControl, Alert,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useAuth } from "@/lib/auth-context";
+import { supabase } from "@/lib/supabase";
 import {
   getProfile, updateProfile, loadPersonas, updatePersona,
-  createPersona, deletePersona,
+  createPersona, deletePersona, requestRefund, deleteAccount,
   type Profile, type Persona,
 } from "@/lib/api";
+
+const REFUND_WINDOW_DAYS = 7;
+const REFUND_WINDOW_MS = REFUND_WINDOW_DAYS * 24 * 60 * 60 * 1000;
 import { GradientBar } from "@/components/GradientBar";
 import { ResumeUploadButton } from "@/components/ResumeUploadButton";
 import {
@@ -38,6 +43,12 @@ export default function ProfileScreen() {
   const [editingPersonaId, setEditingPersonaId] = useState<string | null>(null);
   const [editPersonaName, setEditPersonaName] = useState("");
   const [editPersonaResume, setEditPersonaResume] = useState("");
+
+  // Refund state
+  const [refunding, setRefunding] = useState(false);
+
+  // Account deletion state
+  const [deleting, setDeleting] = useState(false);
 
   const loadAll = useCallback(async () => {
     if (!accessToken) return;
@@ -141,6 +152,70 @@ export default function ProfileScreen() {
     }
   }
 
+  async function handleRefund() {
+    if (refunding || !accessToken) return;
+    Alert.alert(
+      "Request Refund",
+      "Are you sure? You will lose access immediately and cannot undo this.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Request Refund",
+          style: "destructive",
+          onPress: async () => {
+            setRefunding(true);
+            try {
+              await requestRefund(accessToken);
+              // AuthGate in app/_layout.tsx will redirect to /login or /landing
+              // automatically once signOut clears the session.
+              await signOut();
+            } catch (e: any) {
+              setRefunding(false);
+              Alert.alert("Refund failed", e?.message || "Please try again.");
+            }
+          },
+        },
+      ]
+    );
+  }
+
+  async function handleDeleteAccount() {
+    if (deleting || !accessToken) return;
+    Alert.alert(
+      "Delete your account?",
+      "This will permanently delete your account and all data including your profile, job analyses, and application history. This cannot be undone.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete My Account",
+          style: "destructive",
+          onPress: async () => {
+            setDeleting(true);
+            try {
+              await deleteAccount(accessToken);
+              // Clear all local storage so AuthGate treats us as a fresh
+              // user — this removes signal_has_logged_in which, if left,
+              // would route us to /login (the auth user no longer exists,
+              // so login would be pointless).
+              await AsyncStorage.clear();
+              // Sign out directly via supabase — the auth-context wrapper
+              // re-sets signal_has_logged_in after signing out, which we
+              // just cleared. Bypass it. AuthGate detects session=null +
+              // hasLoggedInBefore=null and routes to /about automatically.
+              await supabase.auth.signOut();
+            } catch (e: any) {
+              setDeleting(false);
+              Alert.alert(
+                "Delete failed",
+                e?.message || "Please try again."
+              );
+            }
+          },
+        },
+      ]
+    );
+  }
+
   async function handleDeletePersona(id: string, name: string) {
     if (!accessToken) return;
     try {
@@ -170,6 +245,34 @@ export default function ProfileScreen() {
       >
         <Text style={s.title}>Profile</Text>
 
+        {/* Setup guide */}
+        {profile && (!profile.resume_text || !profile.target_roles) && (
+          <View style={s.setupGuide}>
+            {/* Step 1 */}
+            <View style={s.setupStep}>
+              <View style={[s.setupDot, { backgroundColor: "rgba(81,173,229,0.15)", borderColor: "rgba(81,173,229,0.50)" }]}>
+                <Text style={[s.setupDotText, { color: brand.blue }]}>1</Text>
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={s.setupStepTitle}>Set up your profile</Text>
+                <Text style={s.setupStepBody}>Add your name, target roles, preferred locations, and job search timeline. This tells SIGNAL what you're looking for so every score is relevant to your goals.</Text>
+              </View>
+            </View>
+            {/* Connector */}
+            <View style={s.setupConnector} />
+            {/* Step 2 */}
+            <View style={s.setupStep}>
+              <View style={[s.setupDot, { backgroundColor: "rgba(254,176,106,0.15)", borderColor: "rgba(254,176,106,0.50)" }]}>
+                <Text style={[s.setupDotText, { color: brand.orange }]}>2</Text>
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={s.setupStepTitle}>Create your personas</Text>
+                <Text style={s.setupStepBody}>A persona is a resume attached to your profile. You can create up to 2 — one for each type of role you're targeting. SIGNAL uses whichever persona you select to score and tailor every analysis.</Text>
+              </View>
+            </View>
+          </View>
+        )}
+
         {/* ── Profile Card ──────────────────────────────────── */}
         <View style={s.section}>
           <GradientBar colors={gradients.profile} />
@@ -185,7 +288,7 @@ export default function ProfileScreen() {
 
             {editingProfile ? (
               <View style={{ gap: space.md }}>
-                {(["name", "job_type", "target_roles", "target_locations", "timeline"] as const).map((key) => (
+                {(["name", "target_roles", "target_locations"] as const).map((key) => (
                   <View key={key}>
                     <Text style={s.fieldLabel}>{key.replace(/_/g, " ").toUpperCase()}</Text>
                     <TextInput
@@ -196,6 +299,55 @@ export default function ProfileScreen() {
                     />
                   </View>
                 ))}
+                <View>
+                  <Text style={s.fieldLabel}>TIMELINE</Text>
+                  <Text style={{ fontSize: 11, color: palette.dim, marginBottom: 6, lineHeight: 16 }}>
+                    When are you looking to start your next role?
+                  </Text>
+                  <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+                    {["Immediate", "Summer 2026", "Fall 2026", "Winter 2026", "Spring 2027", "Summer 2027", "Flexible"].map((tl) => {
+                      const active = editFields.timeline === tl;
+                      return (
+                        <Pressable
+                          key={tl}
+                          onPress={() => setEditFields((prev) => ({ ...prev, timeline: tl }))}
+                          style={{
+                            paddingHorizontal: 12, paddingVertical: 7,
+                            borderRadius: radii.sm,
+                            backgroundColor: active ? "rgba(81,173,229,0.12)" : "rgba(255,255,255,0.05)",
+                            borderWidth: 1,
+                            borderColor: active ? "rgba(81,173,229,0.35)" : palette.borderSoft,
+                          }}
+                        >
+                          <Text style={{ fontSize: 12, fontWeight: "900", color: active ? brand.blue : palette.muted }}>{tl}</Text>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                </View>
+                <View>
+                  <Text style={s.fieldLabel}>JOB TYPE</Text>
+                  <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+                    {["Internship", "Full Time", "Contract", "All"].map((jt) => {
+                      const active = editFields.job_type === jt;
+                      return (
+                        <Pressable
+                          key={jt}
+                          onPress={() => setEditFields((prev) => ({ ...prev, job_type: jt }))}
+                          style={{
+                            paddingHorizontal: 14, paddingVertical: 8,
+                            borderRadius: radii.sm,
+                            backgroundColor: active ? "rgba(254,176,106,0.12)" : "rgba(255,255,255,0.05)",
+                            borderWidth: 1,
+                            borderColor: active ? "rgba(254,176,106,0.4)" : palette.borderSoft,
+                          }}
+                        >
+                          <Text style={{ fontSize: 13, fontWeight: "900", color: active ? brand.orange : palette.muted }}>{jt}</Text>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                </View>
                 <View style={{ flexDirection: "row", gap: 10, marginTop: space.sm }}>
                   <Pressable
                     style={({ pressed }) => [s.saveBtn, pressed && { opacity: 0.85 }]}
@@ -292,7 +444,6 @@ export default function ProfileScreen() {
                           <Text style={s.defaultBadgeText}>Default</Text>
                         </View>
                       )}
-                      <Text style={s.versionText}>v{p.persona_version}</Text>
                     </View>
                     <Text style={s.personaPreview} numberOfLines={3}>
                       {p.resume_text ? p.resume_text.slice(0, 180) + "..." : "No resume text"}
@@ -385,7 +536,22 @@ export default function ProfileScreen() {
           >
             <Text style={s.logoutText}>Sign Out</Text>
           </Pressable>
+
         </View>
+
+        {/* ── Delete Account (Apple 5.1.1(v) compliance) ───── */}
+        <Pressable
+          onPress={handleDeleteAccount}
+          disabled={deleting}
+          style={({ pressed }) => [
+            s.deleteAccountBtn,
+            (pressed || deleting) && { opacity: 0.5 },
+          ]}
+        >
+          <Text style={s.deleteAccountText}>
+            {deleting ? "Deleting…" : "Delete Account"}
+          </Text>
+        </Pressable>
       </ScrollView>
 
       {toast && (
@@ -409,6 +575,50 @@ function Row({ label, value }: { label: string; value: string | null | undefined
 
 const s = StyleSheet.create({
   title: { ...typ.h1, color: palette.text, marginBottom: space.xl },
+  setupGuide: {
+    backgroundColor: "rgba(255,255,255,0.03)",
+    borderWidth: 1,
+    borderColor: palette.borderSoft,
+    borderRadius: radii.lg,
+    padding: 18,
+    marginBottom: 20,
+  },
+  setupStep: {
+    flexDirection: "row" as const,
+    alignItems: "flex-start" as const,
+    gap: 14,
+  },
+  setupDot: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    alignItems: "center" as const,
+    justifyContent: "center" as const,
+    marginTop: 2,
+  },
+  setupDotText: {
+    fontSize: 13,
+    fontWeight: "900" as const,
+  },
+  setupConnector: {
+    width: 1.5,
+    height: 16,
+    backgroundColor: "rgba(255,255,255,0.10)",
+    marginLeft: 13,
+    marginVertical: 4,
+  },
+  setupStepTitle: {
+    fontSize: 14,
+    fontWeight: "900" as const,
+    color: "#ffffff",
+    marginBottom: 4,
+  },
+  setupStepBody: {
+    fontSize: 12,
+    color: palette.muted,
+    lineHeight: 18,
+  },
 
   section: {
     borderRadius: radii.xl, borderWidth: 1, borderColor: palette.borderSoft,
@@ -488,6 +698,41 @@ const s = StyleSheet.create({
     alignSelf: "flex-start",
   },
   logoutText: { fontSize: 13, fontWeight: "900", color: palette.muted },
+
+  refundBlock: {
+    marginTop: space.lg,
+    paddingTop: space.lg,
+    borderTopWidth: 1,
+    borderTopColor: palette.borderSoft,
+  },
+  refundTitle: {
+    fontSize: 13, fontWeight: "900", color: palette.text, marginBottom: 4,
+  },
+  refundBody: {
+    fontSize: 12, color: palette.muted, lineHeight: 17, marginBottom: space.md,
+  },
+  refundBtn: {
+    paddingVertical: 10, paddingHorizontal: 16, borderRadius: radii.sm,
+    backgroundColor: "rgba(248,113,113,0.10)",
+    borderWidth: 1, borderColor: "rgba(248,113,113,0.35)",
+    alignSelf: "flex-start",
+  },
+  refundBtnText: { fontSize: 13, fontWeight: "900", color: "#f87171" },
+
+  // Delete Account — text-only destructive button at the bottom of the
+  // screen (Apple 5.1.1(v) compliance; red #FF3B30 to match iOS
+  // destructive semantics).
+  deleteAccountBtn: {
+    alignSelf: "center",
+    marginTop: 40,
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+  },
+  deleteAccountText: {
+    fontSize: 14,
+    color: "#FF3B30",
+    fontWeight: "600",
+  },
 
   toast: {
     position: "absolute", bottom: 100, left: 24, right: 24,

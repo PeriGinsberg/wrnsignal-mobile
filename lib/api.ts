@@ -384,6 +384,9 @@ export type Profile = {
   profile_structured: Record<string, any> | null;
   profile_version: number;
   updated_at: string | null;
+  active: boolean | null;
+  purchase_date: string | null;
+  refunded_at: string | null;
 };
 
 /**
@@ -415,6 +418,46 @@ export async function updateProfile(
   }
   const data = await res.json();
   return (data.profile ?? data) as Profile;
+}
+
+/**
+ * POST /api/stripe/refund
+ * Issues a full refund (7-day money-back window) and revokes access.
+ * Throws on any non-2xx. Returns the Stripe refund id on success.
+ */
+export async function requestRefund(accessToken: string): Promise<string> {
+  const res = await fetch(`${API_BASE}/api/stripe/refund`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  const data = await res.json().catch(() => null);
+  if (!res.ok) {
+    throw new Error(data?.error || `Refund failed (${res.status}).`);
+  }
+  return data?.refund_id ?? "";
+}
+
+/**
+ * DELETE /api/account/delete
+ * Apple App Store guideline 5.1.1(v) compliance. Permanently deletes the
+ * caller's account and all user-owned data (profile, runs, applications,
+ * coach relationships, etc.), anonymizes purchase records, and removes
+ * the Supabase auth user. On success the caller should clear local
+ * storage and sign out — the auth user no longer exists, so any further
+ * API calls with the stale token will 401.
+ */
+export async function deleteAccount(accessToken: string): Promise<void> {
+  const res = await fetch(`${API_BASE}/api/account/delete`, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  const data = await res.json().catch(() => null);
+  if (!res.ok) {
+    throw new Error(data?.error || `Account deletion failed (${res.status}).`);
+  }
+  if (data?.success !== true) {
+    throw new Error(data?.error || "Account deletion failed.");
+  }
 }
 
 /* ── Persona CRUD ───────────────────────────────────────────── */
@@ -554,6 +597,37 @@ export async function deleteApplication(
     const data = await res.json().catch(() => null);
     throw new Error(data?.error || "Application delete failed.");
   }
+}
+
+/**
+ * POST /api/applications — create a new application
+ */
+export async function createApplication(
+  accessToken: string,
+  fields: {
+    company_name: string;
+    job_title: string;
+    location?: string;
+    job_url?: string;
+    application_location?: string;
+    interest_level?: number;
+    application_status?: string;
+    date_posted?: string;
+    notes?: string;
+    persona_id?: string;
+  }
+): Promise<Application> {
+  const res = await fetch(`${API_BASE}/api/applications`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: JSON.stringify(fields),
+  });
+  const data = await res.json().catch(() => null);
+  if (!res.ok) throw new Error(data?.error || "Application create failed.");
+  return (data.application ?? data) as Application;
 }
 
 /* ── Interviews ─────────────────────────────────────────────── */
