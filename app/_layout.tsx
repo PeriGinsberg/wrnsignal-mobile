@@ -45,18 +45,25 @@ export default function RootLayout() {
   );
 }
 
-/** Redirects based on auth state and whether the user has logged in before. */
+/** Redirects based on auth state and whether the user has logged in before.
+ *  Post-1.1.0: the app is sign-in-only. No purchase UI; purchase happens on
+ *  the website. First-time visitors see /about; returning users go to /login. */
 function AuthGate() {
   const { session, loading } = useAuth();
   const segments = useSegments();
   const router = useRouter();
   const [splashDone, setSplashDone] = useState(false);
   const [hasLoggedInBefore, setHasLoggedInBefore] = useState<string | null>(null);
+  const [onboardingComplete, setOnboardingComplete] = useState<string | null>(null);
   const [storageChecked, setStorageChecked] = useState(false);
 
   useEffect(() => {
-    AsyncStorage.getItem("signal_has_logged_in").then((val) => {
-      setHasLoggedInBefore(val);
+    Promise.all([
+      AsyncStorage.getItem("signal_has_logged_in"),
+      AsyncStorage.getItem("signal_onboarding_complete"),
+    ]).then(([loggedIn, onboarded]) => {
+      setHasLoggedInBefore(loggedIn);
+      setOnboardingComplete(onboarded);
       setStorageChecked(true);
     });
   }, []);
@@ -68,36 +75,43 @@ function AuthGate() {
 
     const firstSegment = segments[0];
     const onLoginScreen = firstSegment === "login";
-    const onLandingScreen = firstSegment === "landing";
-    const onJobAnalysis = firstSegment === "job-analysis";
+    const onAboutScreen = firstSegment === "about";
+    const onOnboarding = firstSegment === "onboarding";
     const onRootIndex = firstSegment === undefined;
 
     if (!session) {
-      // No session — route to landing (never logged in) or login (returning user)
-      // Allow job-analysis without auth (it's the free tool)
-      if (!onLoginScreen && !onLandingScreen && !onJobAnalysis) {
+      // No session — route to about (never logged in) or login (returning user).
+      if (!onLoginScreen && !onAboutScreen && !onOnboarding) {
         if (hasLoggedInBefore === "true") {
           router.replace("/login");
         } else {
-          router.replace("/landing");
+          router.replace("/about" as any);
         }
       }
     } else {
-      // Logged in — go to tracker tab
-      if (onLoginScreen || onLandingScreen || onRootIndex) {
-        router.replace("/(tabs)/tracker");
-      }
+      // Logged in — check if onboarding is needed (first-time paid user).
+      // Re-read from AsyncStorage to catch updates from the onboarding screen.
+      AsyncStorage.getItem("signal_onboarding_complete").then((val) => {
+        if (val === "true") {
+          setOnboardingComplete("true");
+          if (onLoginScreen || onAboutScreen || onRootIndex || onOnboarding) {
+            router.replace("/(tabs)/tracker");
+          }
+        } else if (!onOnboarding) {
+          router.replace("/onboarding" as any);
+        }
+      });
     }
-  }, [session, loading, segments, splashDone, storageChecked, hasLoggedInBefore]);
+  }, [session, loading, segments, splashDone, storageChecked, hasLoggedInBefore, onboardingComplete]);
 
   return (
     <>
       <Stack screenOptions={{ headerShown: false }}>
         <Stack.Screen name="index" />
         <Stack.Screen name="(tabs)" />
-        <Stack.Screen name="login" />
-        <Stack.Screen name="landing" />
-        <Stack.Screen name="job-analysis" />
+        <Stack.Screen name="login" options={{ gestureEnabled: false }} />
+        <Stack.Screen name="about" />
+        <Stack.Screen name="onboarding" options={{ gestureEnabled: false }} />
         <Stack.Screen
           name="instructions"
           options={{

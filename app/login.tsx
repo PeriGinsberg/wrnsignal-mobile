@@ -25,6 +25,7 @@ export default function LoginScreen() {
   const [email, setEmail] = useState("");
   const [code, setCode] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [showNoAccount, setShowNoAccount] = useState(false);
   const [loading, setLoading] = useState(false);
   const [hasLoggedInBefore, setHasLoggedInBefore] = useState<string | null>(null);
   const codeInputRef = useRef<TextInput>(null);
@@ -43,7 +44,13 @@ export default function LoginScreen() {
     setLoading(true);
     const err = await sendOtp(trimmed);
     if (err) {
-      setError(err);
+      if (err.toLowerCase().includes("signups not allowed") || err.toLowerCase().includes("not allowed")) {
+        setError("We couldn't find an account for that email. Please check the email address and try again.");
+        setShowNoAccount(true);
+      } else {
+        setError(err);
+        setShowNoAccount(false);
+      }
     } else {
       setStep("code");
       setCode("");
@@ -85,10 +92,10 @@ export default function LoginScreen() {
           contentContainerStyle={styles.scroll}
           keyboardShouldPersistTaps="handled"
         >
-          {/* Back link — only shown to first-time visitors who haven't logged in before */}
+          {/* Back link — only shown to first-time visitors who came from landing */}
           {hasLoggedInBefore !== "true" && (
             <Pressable
-              onPress={() => router.push("/landing")}
+              onPress={() => router.back()}
               style={({ pressed }) => [styles.backLink, pressed && { opacity: 0.6 }]}
             >
               <Text style={styles.backLinkText}>← Back</Text>
@@ -135,6 +142,21 @@ export default function LoginScreen() {
               {error && (
                 <View style={styles.errorBox}>
                   <Text style={styles.errorText}>{error}</Text>
+                </View>
+              )}
+
+              {showNoAccount && (
+                <View style={styles.noAccountActions}>
+                  <Pressable
+                    onPress={() => {
+                      setEmail("");
+                      setError(null);
+                      setShowNoAccount(false);
+                    }}
+                    style={({ pressed }) => [styles.noAccountBtn, pressed && { opacity: 0.8 }]}
+                  >
+                    <Text style={styles.noAccountBtnText}>Try a different email</Text>
+                  </Pressable>
                 </View>
               )}
 
@@ -345,5 +367,37 @@ const styles = StyleSheet.create({
   hintText: {
     ...typ.caption, color: palette.dim, textAlign: "center",
     marginTop: space.lg, lineHeight: 20,
+  },
+
+  // No account actions
+  noAccountActions: {
+    marginTop: space.md,
+    gap: 10,
+  },
+  noAccountBtn: {
+    paddingVertical: 12,
+    borderRadius: radii.md,
+    backgroundColor: "rgba(254,176,106,0.12)",
+    borderWidth: 1,
+    borderColor: "rgba(254,176,106,0.30)",
+    alignItems: "center" as const,
+  },
+  noAccountBtnText: {
+    fontSize: 13,
+    fontWeight: "900" as const,
+    color: brand.orange,
+  },
+  noAccountBtnOutline: {
+    paddingVertical: 12,
+    borderRadius: radii.md,
+    backgroundColor: "rgba(255,255,255,0.04)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.12)",
+    alignItems: "center" as const,
+  },
+  noAccountBtnOutlineText: {
+    fontSize: 13,
+    fontWeight: "700" as const,
+    color: palette.muted,
   },
 });
