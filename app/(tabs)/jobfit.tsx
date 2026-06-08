@@ -8,6 +8,7 @@ import {
   StyleSheet,
   ActivityIndicator,
   Linking,
+  Modal,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
@@ -62,28 +63,60 @@ export default function JobFitScreen() {
   const [urlLoading, setUrlLoading] = useState(false);
   const [urlError, setUrlError] = useState("");
   const [showLinkedInHelper, setShowLinkedInHelper] = useState(false);
+  const [showBlockedPopup, setShowBlockedPopup] = useState(false);
   const [linkedInPasteText, setLinkedInPasteText] = useState("");
   const [linkedInPasteLoading, setLinkedInPasteLoading] = useState(false);
+  const [manualStep, setManualStep] = useState<"paste" | "confirm">("paste");
+  const [manualExtracting, setManualExtracting] = useState(false);
 
-  // Load personas on mount
+  // Reset local state when context is cleared (runNewJob from another screen)
+  useEffect(() => {
+    if (!jobFitResult && !job) {
+      setJobUrl("");
+      setUrlError("");
+      setUrlLoading(false);
+      setShowLinkedInHelper(false);
+      setShowBlockedPopup(false);
+      setLinkedInPasteText("");
+      setLinkedInPasteLoading(false);
+      setManualStep("paste");
+      setManualExtracting(false);
+      setError(null);
+      setJobExpanded(false);
+    }
+  }, [jobFitResult, job]);
+
+  // Load personas on mount. Kept narrow — just loads. Default-selection lives
+  // in its own effect below so user taps don't get clobbered by a stale
+  // closure from this .then. (When accessToken changes twice in quick
+  // succession — getSession + INITIAL_SESSION on cold start, or a token
+  // refresh — two concurrent loadPersonas can race; whichever lands after
+  // the user has picked a non-default persona was reverting the selection.)
   useEffect(() => {
     if (!accessToken || personas.length > 0) return;
     setPersonasLoading(true);
     loadPersonas(accessToken)
-      .then((list) => {
-        setPersonas(list);
-        const def = list.find((p) => p.is_default) ?? list[0];
-        if (def && !selectedPersonaId) setSelectedPersonaId(def.id);
-      })
+      .then((list) => setPersonas(list))
       .catch(() => {})
       .finally(() => setPersonasLoading(false));
   }, [accessToken]);
+
+  // Set default persona once, only if the user hasn't picked one yet. Reading
+  // selectedPersonaId from current render (not from a captured closure) means
+  // a user tap that lands while a load is in flight is honored correctly.
+  useEffect(() => {
+    if (selectedPersonaId) return;
+    if (personas.length === 0) return;
+    const def = personas.find((p) => p.is_default) ?? personas[0];
+    if (def) setSelectedPersonaId(def.id);
+  }, [personas, selectedPersonaId]);
 
   const handleFetchUrl = async () => {
     if (!jobUrl.trim()) return;
     setUrlLoading(true);
     setUrlError("");
     setShowLinkedInHelper(false);
+    setShowBlockedPopup(false);
     try {
       const res = await fetch("https://wrnsignal-api.vercel.app/api/parse-job-url", {
         method: "POST",
@@ -91,9 +124,9 @@ export default function JobFitScreen() {
         body: JSON.stringify({ url: jobUrl.trim() }),
       });
       const data = await res.json();
-      if (data.code === "LINKEDIN") {
+      if (data.code === "LINKEDIN" || data.code === "INDEED_BLOCKED" || data.code === "BLOCKED") {
+        setShowBlockedPopup(true);
         setShowLinkedInHelper(true);
-        Linking.openURL(jobUrl.trim());
         return;
       }
       if (data.error) {
@@ -102,11 +135,12 @@ export default function JobFitScreen() {
       }
       if (data.companyName) setJobContext({ ...jobContext, company: data.companyName });
       if (data.jobTitle) setJobContext({ ...jobContext, title: data.jobTitle });
-      if (data.companyName && data.jobTitle) setJobContext({ title: data.jobTitle, company: data.companyName });
+      if (data.companyName && data.jobTitle) setJobContext({ ...jobContext, title: data.jobTitle, company: data.companyName });
       if (data.jobDescription) setJob(data.jobDescription);
       setJobUrl("");
       setUrlError("");
       setShowLinkedInHelper(false);
+      setShowBlockedPopup(false);
     } catch {
       setUrlError("Something went wrong. Please paste the job description manually.");
     } finally {
@@ -131,7 +165,7 @@ export default function JobFitScreen() {
         setUrlError(data.error);
         return;
       }
-      if (data.companyName && data.jobTitle) setJobContext({ title: data.jobTitle, company: data.companyName });
+      if (data.companyName && data.jobTitle) setJobContext({ ...jobContext, title: data.jobTitle, company: data.companyName });
       else if (data.companyName) setJobContext({ ...jobContext, company: data.companyName });
       else if (data.jobTitle) setJobContext({ ...jobContext, title: data.jobTitle });
       if (data.jobDescription) setJob(data.jobDescription);
@@ -139,6 +173,8 @@ export default function JobFitScreen() {
       setLinkedInPasteText("");
       setJobUrl("");
       setUrlError("");
+      // Show confirm step so user sees extracted results
+      setManualStep("confirm");
     } catch {
       setUrlError("Extraction failed. Please paste the description manually below.");
     } finally {
@@ -146,10 +182,44 @@ export default function JobFitScreen() {
     }
   };
 
+  const handleManualExtract = async () => {
+    if (!job.trim() || job.trim().length < 50) {
+      setError("Please paste more content — at least the full job posting.");
+      return;
+    }
+    setManualExtracting(true);
+    setError(null);
+    try {
+      const res = await fetch("https://wrnsignal-api.vercel.app/api/parse-job-text", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: job.trim() }),
+      });
+      const data = await res.json();
+      if (data.error) {
+        setError(data.error);
+        return;
+      }
+      const newCtx = { ...jobContext };
+      if (data.companyName) newCtx.company = data.companyName;
+      if (data.jobTitle) newCtx.title = data.jobTitle;
+      setJobContext(newCtx);
+      if (data.jobDescription) setJob(data.jobDescription);
+      setManualStep("confirm");
+      setError(null);
+    } catch {
+      setError("Extraction failed. Please try again.");
+    } finally {
+      setManualExtracting(false);
+    }
+  };
+
   const handleRun = useCallback(async () => {
     if (!job.trim()) { setError("Paste a job description first."); return; }
-    if (!jobContext.title.trim()) { setError("Enter the job title before running JobFit."); return; }
-    if (!jobContext.company.trim()) { setError("Enter the company name before running JobFit."); return; }
+    if (!jobContext.title.trim() || !jobContext.company.trim()) {
+      setError('Tap "Extract & Continue" to pull the job title and company from the posting — or add them in the Confirm step.');
+      return;
+    }
     if (!accessToken) { setError("Please log in again."); return; }
     setError(null);
     setLoading(true);
@@ -169,7 +239,7 @@ export default function JobFitScreen() {
       // before scoring runs.
       const title = String(result?.job_signals?.jobTitle ?? result?.job_title ?? jobContext.title).trim();
       const company = String(result?.job_signals?.companyName ?? result?.company ?? jobContext.company).trim();
-      if (title || company) setJobContext({ title, company });
+      if (title || company) setJobContext({ ...jobContext, title, company });
     } catch (e: any) {
       setError(e?.message || "Something went wrong.");
     } finally {
@@ -194,6 +264,18 @@ export default function JobFitScreen() {
               Paste a job description and get a clear decision before you apply.
             </Text>
           </>
+        )}
+
+        {/* Helper card when no input yet */}
+        {!hasResult && !job && !jobUrl && (
+          <View style={s.helperCard}>
+            <Text style={s.helperText}>
+              Paste a job URL above to auto-fill the details, or paste the full posting manually below.
+            </Text>
+            <Text style={s.helperSub}>
+              Works with Indeed, LinkedIn, Greenhouse, Lever, and more.
+            </Text>
+          </View>
         )}
 
         {/* ── Before results: full input area ────────────── */}
@@ -230,21 +312,57 @@ export default function JobFitScreen() {
               </View>
               {!!urlError && <Text style={s.urlError}>{urlError}</Text>}
 
-              {/* LinkedIn Helper */}
-              {showLinkedInHelper && (
+              {/* Blocked-site popup modal */}
+              <Modal
+                visible={showBlockedPopup}
+                transparent
+                animationType="fade"
+                onRequestClose={() => setShowBlockedPopup(false)}
+              >
+                <View style={s.modalOverlay}>
+                  <View style={s.modalCard}>
+                    <Text style={s.modalTitle}>LinkedIn / Indeed Detected</Text>
+                    <Text style={s.modalBody}>
+                      This site blocks automated access. No worries — just:
+                    </Text>
+                    <Text style={s.modalSteps}>
+                      {"1. Open the job posting (button below)\n2. Tap and hold on the job description\n3. Tap \"Select All\" then \"Copy\"\n4. Come back here and paste it below"}
+                    </Text>
+                    <View style={s.modalButtons}>
+                      <Pressable
+                        onPress={() => {
+                          const match = jobUrl.match(/https?:\/\/.+/);
+                          const cleanUrl = match ? match[0].trim() : jobUrl.trim();
+                          Linking.openURL(cleanUrl);
+                          setShowBlockedPopup(false);
+                        }}
+                        style={({ pressed }) => [s.modalPrimaryBtn, pressed && { opacity: 0.8 }]}
+                      >
+                        <Text style={s.modalPrimaryBtnText}>Open Job Posting</Text>
+                      </Pressable>
+                      <Pressable
+                        onPress={() => setShowBlockedPopup(false)}
+                        style={({ pressed }) => [s.modalSecondaryBtn, pressed && { opacity: 0.8 }]}
+                      >
+                        <Text style={s.modalSecondaryBtnText}>Close</Text>
+                      </Pressable>
+                    </View>
+                  </View>
+                </View>
+              </Modal>
+
+              {/* Paste helper (visible after popup closes) */}
+              {showLinkedInHelper && !showBlockedPopup && (
                 <View style={s.linkedInBox}>
-                  <Text style={s.linkedInTitle}>⚡ LINKEDIN DETECTED</Text>
-                  <Text style={s.linkedInInstructions}>
-                    {"LinkedIn blocks automated access. Here's the fastest way:\n1. Your job is open in a new tab\n2. Press Cmd+A (Mac) or Ctrl+A (Windows) to select all\n3. Press Cmd+C / Ctrl+C to copy\n4. Paste everything below"}
-                  </Text>
+                  <Text style={s.linkedInTitle}>LINKEDIN / INDEED DETECTED</Text>
                   <TextInput
                     style={s.linkedInTextArea}
                     value={linkedInPasteText}
                     onChangeText={setLinkedInPasteText}
-                    placeholder="Paste the full LinkedIn page here..."
+                    placeholder="Paste the full job page here..."
                     placeholderTextColor={palette.dim}
                     multiline
-                    scrollEnabled
+                    scrollEnabled={false}
                   />
                   <Pressable
                     onPress={handleLinkedInPaste}
@@ -266,8 +384,6 @@ export default function JobFitScreen() {
               <Text style={s.orDividerText}>OR</Text>
               <View style={s.orDividerLine} />
             </View>
-
-            <Text style={s.pasteManualLabel}>PASTE MANUALLY</Text>
 
             {/* Persona selector */}
             {personas.length > 1 && (
@@ -292,46 +408,87 @@ export default function JobFitScreen() {
                 </View>
               </View>
             )}
+            {!personasLoading && personas.length === 0 && accessToken && (
+              <View style={s.personaEmpty}>
+                <Text style={s.personaEmptyText}>
+                  No resume on file yet. Go to your Profile to add one — SIGNAL uses it to score how well you match each job.
+                </Text>
+              </View>
+            )}
 
-            {/* Required: Job title */}
-            <Text style={s.fieldLabel}>
-              Job Title <Text style={s.requiredMark}>*</Text>
-            </Text>
-            <TextInput
-              style={shared.input}
-              value={jobContext.title}
-              onChangeText={(t) => setJobContext({ ...jobContext, title: t })}
-              placeholder="e.g. Software Engineer"
-              placeholderTextColor={palette.dim}
-              autoCapitalize="words"
-            />
+            {/* ── Paste step ── */}
+            {manualStep === "paste" && (
+              <>
+                <Text style={s.pasteManualLabel}>PASTE FULL JOB POSTING</Text>
+                <Text style={s.pasteHint}>
+                  Paste the entire job posting — SIGNAL will extract the company, title, and description automatically.
+                </Text>
+                <TextInput
+                  style={[shared.textArea, { minHeight: 160 }]}
+                  value={job}
+                  onChangeText={setJob}
+                  placeholder="Paste the entire job posting here..."
+                  placeholderTextColor={palette.dim}
+                  multiline
+                  scrollEnabled={false}
+                />
+                <Pressable
+                  onPress={handleManualExtract}
+                  disabled={manualExtracting}
+                  style={({ pressed }) => [s.extractBtn, manualExtracting && s.extractBtnDisabled, pressed && { opacity: 0.8 }]}
+                >
+                  <Text style={[s.extractBtnText, manualExtracting && s.extractBtnTextDisabled]}>
+                    {manualExtracting ? "Extracting job details..." : "Extract & Continue →"}
+                  </Text>
+                </Pressable>
+              </>
+            )}
 
-            {/* Required: Company name */}
-            <Text style={s.fieldLabel}>
-              Company <Text style={s.requiredMark}>*</Text>
-            </Text>
-            <TextInput
-              style={shared.input}
-              value={jobContext.company}
-              onChangeText={(c) => setJobContext({ ...jobContext, company: c })}
-              placeholder="e.g. Acme Corp"
-              placeholderTextColor={palette.dim}
-              autoCapitalize="words"
-            />
-
-            {/* Job description textarea */}
-            <Text style={s.fieldLabel}>
-              Job Description <Text style={s.requiredMark}>*</Text>
-            </Text>
-            <TextInput
-              style={[shared.textArea, { maxHeight: 200 }]}
-              value={job}
-              onChangeText={setJob}
-              placeholder="Paste the full job description here..."
-              placeholderTextColor={palette.dim}
-              multiline
-              scrollEnabled
-            />
+            {/* ── Confirm step ── */}
+            {manualStep === "confirm" && (
+              <>
+                <Text style={s.pasteManualLabel}>CONFIRM DETAILS</Text>
+                <Text style={s.fieldLabel}>Company</Text>
+                <TextInput
+                  style={shared.input}
+                  value={jobContext.company}
+                  onChangeText={(c) => setJobContext({ ...jobContext, company: c })}
+                  placeholder="Company name"
+                  placeholderTextColor={palette.dim}
+                  autoCapitalize="words"
+                />
+                <Text style={s.fieldLabel}>Job Title</Text>
+                <TextInput
+                  style={shared.input}
+                  value={jobContext.title}
+                  onChangeText={(t) => setJobContext({ ...jobContext, title: t })}
+                  placeholder="Job title"
+                  placeholderTextColor={palette.dim}
+                  autoCapitalize="words"
+                />
+                {job ? (
+                  <View style={s.jdPreview}>
+                    <Text style={s.fieldLabel}>Job Description (extracted)</Text>
+                    <ScrollView style={{ maxHeight: 100 }} nestedScrollEnabled>
+                      <Text style={s.jdPreviewText}>
+                        {job.length > 600 ? job.slice(0, 600) + "…" : job}
+                      </Text>
+                    </ScrollView>
+                  </View>
+                ) : null}
+                <Text style={s.confirmHint}>Look right? You can edit before continuing.</Text>
+                <Pressable
+                  onPress={() => {
+                    setManualStep("paste");
+                    setJob("");
+                    setJobContext({ ...jobContext, title: "", company: "" });
+                  }}
+                  style={{ marginTop: space.sm }}
+                >
+                  <Text style={s.pasteAgainLink}>← Paste again</Text>
+                </Pressable>
+              </>
+            )}
           </>
         )}
 
@@ -736,8 +893,149 @@ const s = StyleSheet.create({
     color: brand.orange,
     marginBottom: 8,
   },
+  helperCard: {
+    backgroundColor: "rgba(255,149,0,0.08)",
+    borderWidth: 1,
+    borderColor: "rgba(255,149,0,0.2)",
+    borderRadius: 10,
+    padding: 14,
+    marginBottom: space.md,
+  },
+  helperText: {
+    fontSize: 13,
+    color: "rgba(255,255,255,0.65)",
+    lineHeight: 19,
+  },
+  helperSub: {
+    fontSize: 11,
+    color: brand.orange,
+    marginTop: 6,
+  },
+  pasteHint: {
+    fontSize: 13,
+    color: palette.muted,
+    lineHeight: 19,
+    marginBottom: space.md,
+  },
+  extractBtn: {
+    marginTop: space.md,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    backgroundColor: brand.orange,
+    borderRadius: radii.sm,
+    alignItems: "center" as const,
+  },
+  extractBtnDisabled: {
+    backgroundColor: "#333",
+  },
+  extractBtnText: {
+    fontSize: 14,
+    fontWeight: "900" as const,
+    color: "#0B0F1A",
+  },
+  extractBtnTextDisabled: {
+    color: "#999",
+  },
+  jdPreview: {
+    marginTop: space.md,
+    marginBottom: space.sm,
+  },
+  jdPreviewText: {
+    fontSize: 13,
+    lineHeight: 19,
+    color: palette.muted,
+    padding: 12,
+    backgroundColor: "rgba(255,255,255,0.04)",
+    borderRadius: radii.sm,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
+  },
+  confirmHint: {
+    fontSize: 12,
+    color: palette.dim,
+    marginTop: space.sm,
+  },
+  pasteAgainLink: {
+    fontSize: 13,
+    fontWeight: "700" as const,
+    color: palette.muted,
+  },
 
-  // LinkedIn helper
+  // Blocked-site modal
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.75)",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 24,
+  },
+  modalCard: {
+    backgroundColor: "#0D1F35",
+    borderWidth: 0.5,
+    borderColor: "#1E3A5F",
+    borderRadius: 16,
+    padding: 28,
+    width: "100%",
+    maxWidth: 400,
+    alignItems: "center",
+  },
+  modalTitle: {
+    fontSize: 22,
+    fontWeight: "900",
+    fontStyle: "italic",
+    color: "#FFD60A",
+    marginBottom: 12,
+    textAlign: "center",
+  },
+  modalBody: {
+    fontSize: 14,
+    color: "rgba(255,255,255,0.6)",
+    lineHeight: 22,
+    textAlign: "center",
+    marginBottom: 8,
+  },
+  modalSteps: {
+    fontSize: 13,
+    color: "rgba(255,255,255,0.5)",
+    lineHeight: 22,
+    textAlign: "left",
+    marginBottom: 24,
+    alignSelf: "stretch",
+  },
+  modalButtons: {
+    flexDirection: "row",
+    gap: 10,
+    alignSelf: "stretch",
+  },
+  modalPrimaryBtn: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 10,
+    backgroundColor: "#FF6B00",
+    alignItems: "center",
+  },
+  modalPrimaryBtnText: {
+    fontSize: 14,
+    fontWeight: "900",
+    fontStyle: "italic",
+    color: "#ffffff",
+  },
+  modalSecondaryBtn: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 10,
+    backgroundColor: "rgba(255,255,255,0.06)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.12)",
+    alignItems: "center",
+  },
+  modalSecondaryBtnText: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "rgba(255,255,255,0.5)",
+  },
+
+  // Paste helper
   linkedInBox: {
     backgroundColor: "rgba(255,214,10,0.04)",
     borderWidth: 1,
@@ -871,6 +1169,15 @@ const s = StyleSheet.create({
   personaDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: brand.orange },
   personaName: { fontSize: 13, fontWeight: "900", color: palette.muted },
   personaNameActive: { color: brand.orange },
+  personaEmpty: {
+    marginBottom: space.md,
+    padding: space.sm,
+    borderRadius: radii.sm,
+    backgroundColor: "rgba(254,176,106,0.06)",
+    borderWidth: 1,
+    borderColor: "rgba(254,176,106,0.2)",
+  },
+  personaEmptyText: { fontSize: 12, color: palette.dim, lineHeight: 18 },
 
   // Error
   errorBox: {
