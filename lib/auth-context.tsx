@@ -42,15 +42,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Check for persisted session
     supabase.auth.getSession().then(({ data: { session: s } }) => {
       setSession(s);
+      if (s) AsyncStorage.setItem("signal_has_logged_in", "true");
       setLoading(false);
     });
 
-    // Listen for auth state changes
+    // Listen for auth state changes. Only clear the session on explicit
+    // SIGNED_OUT — transient refresh failures should not kick the user out.
     const { data: listener } = supabase.auth.onAuthStateChange(
-      (_event, s) => {
-        setSession(s);
+      (event, s) => {
         if (s) {
+          setSession(s);
           AsyncStorage.setItem("signal_has_logged_in", "true");
+        } else if (event === "SIGNED_OUT") {
+          setSession(null);
         }
       }
     );
@@ -75,21 +79,38 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     []
   );
 
-  // Verify OTP code
+  // Verify OTP code — try "email" type first (returning users), then
+  // "signup" type (new users whose first OTP is a signup confirmation)
   const verifyOtp = useCallback(
     async (email: string, code: string): Promise<string | null> => {
+      const trimmedEmail = email.trim().toLowerCase();
+      const trimmedCode = code.trim();
+
       const { error } = await supabase.auth.verifyOtp({
-        email: email.trim().toLowerCase(),
-        token: code.trim(),
+        email: trimmedEmail,
+        token: trimmedCode,
         type: "email",
       });
-      return error ? error.message : null;
+
+      if (!error) return null;
+
+      // If "email" type failed, try "signup" — new users created via
+      // signInWithOtp get a signup confirmation token, not a magic link OTP
+      const { error: signupErr } = await supabase.auth.verifyOtp({
+        email: trimmedEmail,
+        token: trimmedCode,
+        type: "signup",
+      });
+
+      return signupErr ? signupErr.message : null;
     },
     []
   );
 
-  // Sign out
+  // Sign out — mark that user has logged in before so next cold start
+  // routes to /login instead of /landing
   const signOut = useCallback(async () => {
+    await AsyncStorage.setItem("signal_has_logged_in", "true");
     await supabase.auth.signOut();
     setSession(null);
   }, []);
