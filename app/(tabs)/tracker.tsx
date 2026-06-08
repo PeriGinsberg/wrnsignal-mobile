@@ -5,6 +5,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
+import { useFocusEffect } from "@react-navigation/native";
 import { useAuth } from "@/lib/auth-context";
 import { useJob } from "@/lib/job-context";
 import { getApplications, type Application } from "@/lib/api";
@@ -71,6 +72,9 @@ export default function TrackerScreen() {
 
   useEffect(() => { load(); }, [load]);
 
+  // Re-fetch when screen regains focus (e.g. returning from add-job)
+  useFocusEffect(useCallback(() => { load(); }, [load]));
+
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     await load();
@@ -110,7 +114,17 @@ export default function TrackerScreen() {
         contentContainerStyle={shared.scrollContent}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={brand.orange} />}
       >
-        <Text style={s.title}>Tracker</Text>
+        <View style={s.titleRow}>
+          <Text style={s.title}>Tracker</Text>
+          <View style={{ flexDirection: "row", gap: 8 }}>
+            <Pressable
+              onPress={() => router.push("/(tabs)/jobfit")}
+              style={({ pressed }) => [s.runNewJobBtn, pressed && { opacity: 0.85 }]}
+            >
+              <Text style={s.runNewJobBtnText}>Run SIGNAL</Text>
+            </Pressable>
+          </View>
+        </View>
 
         {/* ── Pipeline Analytics ────────────────────────────── */}
         <View style={s.analyticsCard}>
@@ -169,20 +183,6 @@ export default function TrackerScreen() {
           />
         )}
 
-        {/* ── Run New Job CTA ───────────────────────────── */}
-        <Pressable
-          onPress={() => router.push("/(tabs)/jobfit")}
-          style={({ pressed }) => [s.newJobCta, pressed && { opacity: 0.85 }]}
-        >
-          <View style={s.newJobCtaInner}>
-            <View style={{ flex: 1 }}>
-              <Text style={s.newJobCtaLabel}>READY TO ANALYZE A NEW ROLE?</Text>
-              <Text style={s.newJobCtaTitle}>Run New Job →</Text>
-            </View>
-            <View style={s.newJobCtaDot} />
-          </View>
-        </Pressable>
-
         {/* ── Filtered Application List ──────────────────── */}
         {(() => {
           let filtered = apps;
@@ -233,19 +233,20 @@ export default function TrackerScreen() {
     if (list.length === 0) {
       return (
         <View style={s.emptyCard}>
+          <Text style={{ fontSize: 32, textAlign: "center", marginBottom: 12 }}>💼</Text>
           <Text style={s.emptyText}>
-            {activeFilter ? "No applications match this filter." : "No applications tracked yet."}
+            {activeFilter ? "No applications match this filter." : "No applications yet"}
           </Text>
           {!activeFilter && (
             <>
               <Text style={s.emptyHint}>
-                Run Job Fit on a role and it will appear here automatically.
+                Run a Job Fit analysis to add your first job.
               </Text>
               <Pressable
                 onPress={() => router.push("/(tabs)/jobfit")}
                 style={({ pressed }) => [s.emptyBtn, pressed && { opacity: 0.85 }]}
               >
-                <Text style={s.emptyBtnText}>Run New Job →</Text>
+                <Text style={s.emptyBtnText}>Run Job Fit →</Text>
               </Pressable>
             </>
           )}
@@ -329,7 +330,7 @@ function FontAwesomeChevron() {
 }
 
 const s = StyleSheet.create({
-  title: { ...typ.h1, color: palette.text, marginBottom: space.xl },
+  title: { ...typ.h1, color: palette.text },
 
   // Analytics
   analyticsCard: {
@@ -338,15 +339,15 @@ const s = StyleSheet.create({
   },
   analyticsInner: { padding: space.xl },
   analyticsEyebrow: { ...typ.eyebrow, color: brand.blue, marginBottom: space.lg },
-  metricsRow: { flexDirection: "row", gap: 6, marginBottom: space.xl },
+  metricsRow: { flexDirection: "row", flexWrap: "wrap", gap: 6, marginBottom: space.xl },
   metricBox: {
-    flex: 1, padding: 10, borderRadius: radii.sm,
+    width: "31%" as any, padding: 10, borderRadius: radii.sm,
     backgroundColor: "rgba(255,255,255,0.04)", borderWidth: 1, borderColor: palette.borderSoft,
     alignItems: "center",
   },
   metricLabel: {
-    fontSize: 8, fontWeight: "800", letterSpacing: 1, textTransform: "uppercase",
-    color: palette.dim, marginBottom: 4,
+    fontSize: 9, fontWeight: "800", letterSpacing: 0.5, textTransform: "uppercase",
+    color: palette.dim, marginBottom: 4, textAlign: "center",
   },
   metricValue: { fontSize: 20, fontWeight: "900" },
 
@@ -433,38 +434,35 @@ const s = StyleSheet.create({
     color: "#4ade80",
     letterSpacing: 0.5,
   },
-  newJobCta: {
-    marginBottom: 16,
-    borderRadius: radii.lg,
-    borderWidth: 1,
-    borderColor: "rgba(254,176,106,0.25)",
-    backgroundColor: "rgba(254,176,106,0.04)",
-    overflow: "hidden" as const,
-  },
-  newJobCtaInner: {
+  titleRow: {
     flexDirection: "row" as const,
+    justifyContent: "space-between" as const,
     alignItems: "center" as const,
-    padding: space.lg,
-    gap: 12,
+    marginBottom: space.xl,
   },
-  newJobCtaLabel: {
-    fontSize: 9,
+  addJobBtn: {
+    paddingVertical: 7,
+    paddingHorizontal: 14,
+    borderRadius: radii.sm,
+    backgroundColor: "rgba(81,173,229,0.15)",
+    borderWidth: 1,
+    borderColor: "rgba(81,173,229,0.35)",
+  },
+  addJobBtnText: {
+    fontSize: 12,
     fontWeight: "900" as const,
-    letterSpacing: 1.5,
-    color: "rgba(254,176,106,0.6)",
-    marginBottom: 3,
+    color: brand.blue,
   },
-  newJobCtaTitle: {
-    fontSize: 16,
-    fontWeight: "900" as const,
-    fontStyle: "italic" as const,
-    color: brand.orange,
-  },
-  newJobCtaDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
+  runNewJobBtn: {
+    paddingVertical: 7,
+    paddingHorizontal: 14,
+    borderRadius: radii.sm,
     backgroundColor: brand.orange,
+  },
+  runNewJobBtnText: {
+    fontSize: 12,
+    fontWeight: "900" as const,
+    color: "#04060F",
   },
   emptyBtn: {
     marginTop: 14,
@@ -479,5 +477,20 @@ const s = StyleSheet.create({
     fontWeight: "900" as const,
     fontStyle: "italic" as const,
     color: "#04060F",
+  },
+  emptyBtnOutline: {
+    marginTop: 10,
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: palette.borderSoft,
+    backgroundColor: "rgba(255,255,255,0.04)",
+    alignSelf: "center" as const,
+  },
+  emptyBtnOutlineText: {
+    fontSize: 14,
+    fontWeight: "700" as const,
+    color: palette.muted,
   },
 });

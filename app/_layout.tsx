@@ -54,16 +54,11 @@ function AuthGate() {
   const router = useRouter();
   const [splashDone, setSplashDone] = useState(false);
   const [hasLoggedInBefore, setHasLoggedInBefore] = useState<string | null>(null);
-  const [onboardingComplete, setOnboardingComplete] = useState<string | null>(null);
   const [storageChecked, setStorageChecked] = useState(false);
 
   useEffect(() => {
-    Promise.all([
-      AsyncStorage.getItem("signal_has_logged_in"),
-      AsyncStorage.getItem("signal_onboarding_complete"),
-    ]).then(([loggedIn, onboarded]) => {
+    AsyncStorage.getItem("signal_has_logged_in").then((loggedIn) => {
       setHasLoggedInBefore(loggedIn);
-      setOnboardingComplete(onboarded);
       setStorageChecked(true);
     });
   }, []);
@@ -76,12 +71,11 @@ function AuthGate() {
     const firstSegment = segments[0];
     const onLoginScreen = firstSegment === "login";
     const onAboutScreen = firstSegment === "about";
-    const onOnboarding = firstSegment === "onboarding";
     const onRootIndex = firstSegment === undefined;
 
     if (!session) {
       // No session — route to about (never logged in) or login (returning user).
-      if (!onLoginScreen && !onAboutScreen && !onOnboarding) {
+      if (!onLoginScreen && !onAboutScreen) {
         if (hasLoggedInBefore === "true") {
           router.replace("/login");
         } else {
@@ -89,20 +83,12 @@ function AuthGate() {
         }
       }
     } else {
-      // Logged in — check if onboarding is needed (first-time paid user).
-      // Re-read from AsyncStorage to catch updates from the onboarding screen.
-      AsyncStorage.getItem("signal_onboarding_complete").then((val) => {
-        if (val === "true") {
-          setOnboardingComplete("true");
-          if (onLoginScreen || onAboutScreen || onRootIndex || onOnboarding) {
-            router.replace("/(tabs)/tracker");
-          }
-        } else if (!onOnboarding) {
-          router.replace("/onboarding" as any);
-        }
-      });
+      // Logged in — route into the app from the entry screens.
+      if (onLoginScreen || onAboutScreen || onRootIndex) {
+        router.replace("/(tabs)/tracker");
+      }
     }
-  }, [session, loading, segments, splashDone, storageChecked, hasLoggedInBefore, onboardingComplete]);
+  }, [session, loading, segments, splashDone, storageChecked, hasLoggedInBefore]);
 
   return (
     <>
@@ -111,7 +97,6 @@ function AuthGate() {
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="login" options={{ gestureEnabled: false }} />
         <Stack.Screen name="about" />
-        <Stack.Screen name="onboarding" options={{ gestureEnabled: false }} />
         <Stack.Screen
           name="instructions"
           options={{
