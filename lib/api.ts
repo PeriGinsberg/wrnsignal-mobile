@@ -159,8 +159,10 @@ export type JobFitResult = {
   bullets?: string[];
   risk?: string[];
   risk_structured?: Array<{
-    reframe: string;
     keyword: string;
+    gap: string;
+    adjacent_evidence: string;
+    severity?: "low" | "medium" | "high";
   }>;
   gate_triggered?: { type: string; detail?: string };
   job_signals?: {

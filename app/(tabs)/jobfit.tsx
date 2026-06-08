@@ -425,10 +425,35 @@ function JobFitResults() {
   const whyCodes = Array.isArray(r.why_codes) ? r.why_codes : [];
   const riskCodes = Array.isArray(r.risk_codes) ? r.risk_codes : [];
   const whyStructured = Array.isArray((r as any)?.why_structured) ? (r as any).why_structured : [];
-  const riskStructured = Array.isArray((r as any)?.risk_structured) ? (r as any).risk_structured : [];
+  const riskStructured = Array.isArray(r.risk_structured) ? r.risk_structured : [];
 
   const whyCount = whyBullets.length || whyCodes.length;
   const riskCount = riskBullets.length || riskCodes.length || riskStructured.length;
+
+  // Normalize risks into one typed list, then sort by severity (high → low) so
+  // the most important gaps surface first. Built fresh via .map → sorting does
+  // not mutate r.risk_structured / r.risk_codes.
+  type RiskItem = { text: string; keyword: string; detail: string; severity?: string };
+  const SEV_RANK: Record<string, number> = { high: 3, medium: 2, low: 1 };
+  const riskItems: RiskItem[] = (
+    riskStructured.length > 0
+      ? riskStructured.map((rs) => ({
+          text: String(rs.gap ?? "").trim(),
+          keyword: String(rs.keyword ?? "").trim(),
+          detail: String(rs.adjacent_evidence ?? "").trim(),
+          severity: rs.severity as string | undefined,
+        }))
+      : riskBullets.length > 0
+      ? riskBullets.map((rb) => ({ text: rb, keyword: "", detail: "", severity: undefined }))
+      : riskCodes.map((rc) => ({
+          text: String(rc?.risk ?? "").trim(),
+          keyword: String(rc?.job_fact ?? "").trim(),
+          detail: "",
+          severity: rc?.severity as string | undefined,
+        }))
+  )
+    .filter((it) => it.text)
+    .sort((a, b) => (SEV_RANK[b.severity ?? ""] ?? 0) - (SEV_RANK[a.severity ?? ""] ?? 0));
 
   const gate = r.gate_triggered ?? { type: "none" };
   const isForcePass = gate?.type === "force_pass";
@@ -582,29 +607,38 @@ function JobFitResults() {
           badgeBg="rgba(248,113,113,0.10)"
           badgeColor="#f87171"
         >
-          {(riskStructured.length > 0
-            ? riskStructured.map((rs: any) => ({ text: rs.reframe, keyword: rs.keyword }))
-            : riskBullets.length > 0
-            ? riskBullets.map((rb) => ({ text: rb, keyword: "" }))
-            : riskCodes.map((rc) => ({ text: String(rc?.risk ?? "").trim(), keyword: String(rc?.job_fact ?? "").trim() }))
-          )
-            .filter((item: any) => item.text)
-            .map((item: any, i: number) => (
-              <View key={i} style={s.bulletRow}>
-                <View style={s.riskDot}><Text style={s.riskBang}>!</Text></View>
-                <View style={{ flex: 1 }}>
-                  {item.keyword ? (
-                    <Text style={s.riskKeyword}>{String(item.keyword).toUpperCase()}</Text>
-                  ) : null}
-                  <Text style={s.bulletText}>{item.text}</Text>
-                </View>
+          {riskItems.map((item, i) => (
+            <View key={i} style={s.bulletRow}>
+              <View style={s.riskDot}><Text style={s.riskBang}>!</Text></View>
+              <View style={{ flex: 1 }}>
+                {(item.keyword || item.severity) ? (
+                  <View style={s.riskHeaderRow}>
+                    {item.keyword ? (
+                      <Text style={s.riskKeyword}>{item.keyword.toUpperCase()}</Text>
+                    ) : null}
+                    {item.severity ? <SeverityPill severity={item.severity} /> : null}
+                  </View>
+                ) : null}
+                <Text style={s.bulletText}>{item.text}</Text>
+                {item.detail ? <Text style={s.riskDetail}>{item.detail}</Text> : null}
               </View>
-            ))
-          }
+            </View>
+          ))}
         </SectionCard>
       )}
     </View>
   );
+}
+
+/* ── Severity badge — reuses the shared Pill; mapped to risk colors ── */
+function SeverityPill({ severity }: { severity: string }) {
+  const map: Record<string, { label: string; bg: string; color: string; border: string }> = {
+    high: { label: "High", bg: "rgba(248,113,113,0.12)", color: "#f87171", border: "rgba(248,113,113,0.3)" },
+    medium: { label: "Medium", bg: "rgba(254,176,106,0.12)", color: brand.orange, border: "rgba(254,176,106,0.3)" },
+    low: { label: "Low", bg: "rgba(255,255,255,0.07)", color: palette.muted, border: palette.border },
+  };
+  const m = map[severity] ?? map.low;
+  return <Pill text={m.label} bg={m.bg} color={m.color} borderColor={m.border} />;
 }
 
 /* ── Styles ──────────────────────────────────────────────────── */
@@ -938,6 +972,12 @@ const s = StyleSheet.create({
   riskKeyword: {
     fontSize: 10, fontWeight: "900", letterSpacing: 1.4,
     textTransform: "uppercase", color: "#f87171", marginBottom: 4,
+  },
+  riskHeaderRow: {
+    flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: 8,
+  },
+  riskDetail: {
+    fontSize: 12, lineHeight: 18, color: palette.dim, marginTop: 4,
   },
   whyKeyword: {
     fontSize: 10, fontWeight: "900", letterSpacing: 1.4,
