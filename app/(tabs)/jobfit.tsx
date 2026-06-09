@@ -113,6 +113,15 @@ export default function JobFitScreen() {
     if (def) setSelectedPersonaId(def.id);
   }, [personas, selectedPersonaId]);
 
+  // Close the blocked-site modal. Always clears the popup + which code triggered it;
+  // for LinkedIn also dismisses the paste helper so the user returns to the clean
+  // paste screen. Indeed/generic keep their helper (their flow is unchanged).
+  const closeBlockedModal = () => {
+    if (blockedCode === "LINKEDIN") setShowLinkedInHelper(false);
+    setShowBlockedPopup(false);
+    setBlockedCode(null);
+  };
+
   const handleFetchUrl = async () => {
     if (!jobUrl.trim()) return;
     setUrlLoading(true);
@@ -320,7 +329,7 @@ export default function JobFitScreen() {
                 visible={showBlockedPopup}
                 transparent
                 animationType="fade"
-                onRequestClose={() => setShowBlockedPopup(false)}
+                onRequestClose={() => closeBlockedModal()}
               >
                 <View style={s.modalOverlay}>
                   <View style={s.modalCard}>
@@ -344,15 +353,23 @@ export default function JobFitScreen() {
                     )}
                     <View style={s.modalButtons}>
                       <Pressable
-                        onPress={() => {
+                        onPress={async () => {
                           const match = jobUrl.match(/https?:\/\/.+/);
                           const cleanUrl = match ? match[0].trim() : jobUrl.trim();
                           if (blockedCode === "LINKEDIN") {
-                            WebBrowser.openBrowserAsync(cleanUrl);
+                            // Present SFSafariViewController and WAIT for it to dismiss
+                            // before tearing down the RN Modal — presenting + dismissing
+                            // in the same tick is what froze the UI. .catch so a failed
+                            // open still closes the modal instead of hanging.
+                            try {
+                              await WebBrowser.openBrowserAsync(cleanUrl);
+                            } catch {
+                              // Safari failed to open — fall through and close cleanly.
+                            }
                           } else {
                             Linking.openURL(cleanUrl);
                           }
-                          setShowBlockedPopup(false);
+                          closeBlockedModal();
                         }}
                         style={({ pressed }) => [s.modalPrimaryBtn, pressed && { opacity: 0.8 }]}
                       >
@@ -361,7 +378,7 @@ export default function JobFitScreen() {
                         </Text>
                       </Pressable>
                       <Pressable
-                        onPress={() => setShowBlockedPopup(false)}
+                        onPress={() => closeBlockedModal()}
                         style={({ pressed }) => [s.modalSecondaryBtn, pressed && { opacity: 0.8 }]}
                       >
                         <Text style={s.modalSecondaryBtnText}>Close</Text>
