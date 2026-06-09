@@ -12,6 +12,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
+import * as WebBrowser from "expo-web-browser";
 import { useAuth } from "@/lib/auth-context";
 import { useJob } from "@/lib/job-context";
 import { runJobFit as apiRunJobFit, loadPersonas } from "@/lib/api";
@@ -64,6 +65,7 @@ export default function JobFitScreen() {
   const [urlError, setUrlError] = useState("");
   const [showLinkedInHelper, setShowLinkedInHelper] = useState(false);
   const [showBlockedPopup, setShowBlockedPopup] = useState(false);
+  const [blockedCode, setBlockedCode] = useState<string | null>(null);
   const [linkedInPasteText, setLinkedInPasteText] = useState("");
   const [linkedInPasteLoading, setLinkedInPasteLoading] = useState(false);
   const [manualStep, setManualStep] = useState<"paste" | "confirm">("paste");
@@ -125,6 +127,7 @@ export default function JobFitScreen() {
       });
       const data = await res.json();
       if (data.code === "LINKEDIN" || data.code === "INDEED_BLOCKED" || data.code === "BLOCKED") {
+        setBlockedCode(data.code);
         setShowBlockedPopup(true);
         setShowLinkedInHelper(true);
         return;
@@ -321,24 +324,41 @@ export default function JobFitScreen() {
               >
                 <View style={s.modalOverlay}>
                   <View style={s.modalCard}>
-                    <Text style={s.modalTitle}>LinkedIn / Indeed Detected</Text>
-                    <Text style={s.modalBody}>
-                      This site blocks automated access. No worries — just:
-                    </Text>
-                    <Text style={s.modalSteps}>
-                      {"1. Open the job posting (button below)\n2. Tap and hold on the job description\n3. Tap \"Select All\" then \"Copy\"\n4. Come back here and paste it below"}
-                    </Text>
+                    {blockedCode === "LINKEDIN" ? (
+                      <>
+                        <Text style={s.modalTitle}>LinkedIn&apos;s iOS app doesn&apos;t allow copying</Text>
+                        <Text style={s.modalSteps}>
+                          {"To analyze a LinkedIn job:\n\n1. Tap Open in Safari below\n2. Scroll to 'About the job'\n3. Tap 'See more' to expand the full description\n4. Long-press the description, drag the selection handles to cover all of it\n5. Tap Copy\n6. Return to SIGNAL and paste"}
+                        </Text>
+                      </>
+                    ) : (
+                      <>
+                        <Text style={s.modalTitle}>LinkedIn / Indeed Detected</Text>
+                        <Text style={s.modalBody}>
+                          This site blocks automated access. No worries — just:
+                        </Text>
+                        <Text style={s.modalSteps}>
+                          {"1. Open the job posting (button below)\n2. Tap and hold on the job description\n3. Tap \"Select All\" then \"Copy\"\n4. Come back here and paste it below"}
+                        </Text>
+                      </>
+                    )}
                     <View style={s.modalButtons}>
                       <Pressable
                         onPress={() => {
                           const match = jobUrl.match(/https?:\/\/.+/);
                           const cleanUrl = match ? match[0].trim() : jobUrl.trim();
-                          Linking.openURL(cleanUrl);
+                          if (blockedCode === "LINKEDIN") {
+                            WebBrowser.openBrowserAsync(cleanUrl);
+                          } else {
+                            Linking.openURL(cleanUrl);
+                          }
                           setShowBlockedPopup(false);
                         }}
                         style={({ pressed }) => [s.modalPrimaryBtn, pressed && { opacity: 0.8 }]}
                       >
-                        <Text style={s.modalPrimaryBtnText}>Open Job Posting</Text>
+                        <Text style={s.modalPrimaryBtnText}>
+                          {blockedCode === "LINKEDIN" ? "Open in Safari" : "Open Job Posting"}
+                        </Text>
                       </Pressable>
                       <Pressable
                         onPress={() => setShowBlockedPopup(false)}
