@@ -79,20 +79,22 @@ function AuthGate() {
     const firstSegment = segments[0];
     const onLoginScreen = firstSegment === "login";
     const onAboutScreen = firstSegment === "about";
+    const onWelcomeScreen = (firstSegment as string) === "welcome";
     const onRootIndex = firstSegment === undefined;
 
     if (!session) {
-      // No session — route to about (never logged in) or login (returning user).
-      if (!onLoginScreen && !onAboutScreen) {
+      // No session — route to welcome (never logged in) or login (returning
+      // user). /about stays registered as a fallback during cleanup.
+      if (!onLoginScreen && !onAboutScreen && !onWelcomeScreen) {
         if (hasLoggedInBefore === "true") {
           router.replace("/login");
         } else {
-          router.replace("/about" as any);
+          router.replace("/welcome" as any);
         }
       }
     } else {
       // Logged in — route into the app from the entry screens.
-      if (onLoginScreen || onAboutScreen || onRootIndex) {
+      if (onLoginScreen || onAboutScreen || onWelcomeScreen || onRootIndex) {
         router.replace("/(tabs)/tracker");
       }
     }
@@ -104,6 +106,7 @@ function AuthGate() {
         <Stack.Screen name="index" />
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="login" options={{ gestureEnabled: false }} />
+        <Stack.Screen name="welcome" options={{ gestureEnabled: false }} />
         <Stack.Screen name="about" />
         <Stack.Screen
           name="instructions"
