@@ -13,6 +13,7 @@ import {
   type Application, type Interview,
 } from "@/lib/api";
 import { GradientBar } from "@/components/GradientBar";
+import { DatePickerField } from "@/components/DatePickerField";
 import {
   palette, brand, type as typ, shared, space, radii, gradients,
 } from "@/constants/theme";
@@ -141,14 +142,7 @@ function EditInterviewForm({
         </View>
 
         <Text style={[ef.label, { marginTop: space.md }]}>INTERVIEW DATE</Text>
-        <TextInput
-          style={ef.input}
-          value={date}
-          onChangeText={setDate}
-          placeholder="YYYY-MM-DD"
-          placeholderTextColor={palette.dim}
-          autoCapitalize="none"
-        />
+        <DatePickerField value={date} onChange={setDate} placeholder="Select interview date" />
 
         <Text style={[ef.label, { marginTop: space.md }]}>NOTES</Text>
         <TextInput
@@ -402,6 +396,12 @@ export default function ApplicationDetailScreen() {
           headerStyle: { backgroundColor: palette.bg },
           headerTintColor: brand.blue,
           headerShadowVisible: false,
+          headerLeft: () => (
+            <Pressable onPress={() => router.navigate("/(tabs)/tracker")} style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
+              <Text style={{ fontSize: 17, color: brand.blue }}>‹</Text>
+              <Text style={{ fontSize: 17, color: brand.blue }}>Tracker</Text>
+            </Pressable>
+          ),
         }}
       />
       <ScrollView contentContainerStyle={s.scroll} keyboardShouldPersistTaps="handled">
@@ -468,24 +468,10 @@ export default function ApplicationDetailScreen() {
           />
 
           <Text style={[s.fieldLabel, { marginTop: space.md }]}>Applied Date</Text>
-          <TextInput
-            style={s.input}
-            value={appliedDate}
-            onChangeText={setAppliedDate}
-            placeholder="YYYY-MM-DD"
-            placeholderTextColor={palette.dim}
-            autoCapitalize="none"
-          />
+          <DatePickerField value={appliedDate} onChange={setAppliedDate} placeholder="Select applied date" />
 
           <Text style={[s.fieldLabel, { marginTop: space.md }]}>Date Posted</Text>
-          <TextInput
-            style={s.input}
-            value={datePosted}
-            onChangeText={setDatePosted}
-            placeholder="YYYY-MM-DD"
-            placeholderTextColor={palette.dim}
-            autoCapitalize="none"
-          />
+          <DatePickerField value={datePosted} onChange={setDatePosted} placeholder="Select date posted" />
 
           <Text style={[s.fieldLabel, { marginTop: space.md }]}>Applied Via</Text>
           <View style={s.chipRow}>
@@ -662,14 +648,7 @@ export default function ApplicationDetailScreen() {
                 </View>
 
                 <Text style={[s.formLabel, { marginTop: space.md }]}>INTERVIEW DATE</Text>
-                <TextInput
-                  style={s.input}
-                  value={newDate}
-                  onChangeText={setNewDate}
-                  placeholder="YYYY-MM-DD"
-                  placeholderTextColor={palette.dim}
-                  autoCapitalize="none"
-                />
+                <DatePickerField value={newDate} onChange={setNewDate} placeholder="Select interview date" />
 
                 <Text style={[s.formLabel, { marginTop: space.md }]}>NOTES</Text>
                 <TextInput

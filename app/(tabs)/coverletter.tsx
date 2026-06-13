@@ -7,6 +7,7 @@ import { runCoverLetter as apiRunCoverLetter } from "@/lib/api";
 import { RunButton } from "@/components/RunButton";
 import { CompletionIndicator } from "@/components/CompletionIndicator";
 import { CopyButton } from "@/components/CopyButton";
+import { EmptyToolState } from "@/components/EmptyToolState";
 import {
   palette, brand, type as typ, shared, space, radii,
 } from "@/constants/theme";
@@ -73,7 +74,7 @@ function buildFinalLetter(args: {
 
 export default function CoverLetterScreen() {
   const { accessToken, email: userEmail } = useAuth();
-  const { job, jobFitResult, jobContext, coverLetterResult, setCoverLetterResult } = useJob();
+  const { job, jobFitResult, positioningResult, jobContext, coverLetterResult, setCoverLetterResult } = useJob();
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -89,14 +90,14 @@ export default function CoverLetterScreen() {
     setError(null);
     setLoading(true);
     try {
-      const result = await apiRunCoverLetter(accessToken, job, jobFitResult);
+      const result = await apiRunCoverLetter(accessToken, job, jobFitResult, positioningResult);
       setCoverLetterResult(result);
     } catch (e: any) {
       setError(e?.message || "Something went wrong.");
     } finally {
       setLoading(false);
     }
-  }, [job, accessToken, jobFitResult]);
+  }, [job, accessToken, jobFitResult, positioningResult]);
 
   const r = coverLetterResult;
   const hasResult = !!r;
@@ -127,7 +128,15 @@ export default function CoverLetterScreen() {
         <CompletionIndicator current={3} />
         <Text style={s.title}>Cover Letter</Text>
 
-        {!hasResult && (
+        {!hasResult && !job && (
+          <EmptyToolState
+            icon="📝"
+            headline="No cover letter yet"
+            body="Run a Job Fit analysis first. Your personalized cover letter will appear here."
+          />
+        )}
+
+        {!hasResult && job && (
           <Text style={s.subtitle}>
             Generate a cover letter written in your voice, tied to your real background and this specific role.
           </Text>

@@ -1,5 +1,5 @@
 import { useState, useCallback } from "react";
-import { ScrollView, View, Text, Pressable, StyleSheet } from "react-native";
+import { ScrollView, View, Text, Pressable, StyleSheet, Linking } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "@/lib/auth-context";
 import { useJob } from "@/lib/job-context";
@@ -7,6 +7,7 @@ import { runNetworking as apiRunNetworking } from "@/lib/api";
 import { RunButton } from "@/components/RunButton";
 import { CompletionIndicator } from "@/components/CompletionIndicator";
 import { CopyButton } from "@/components/CopyButton";
+import { EmptyToolState } from "@/components/EmptyToolState";
 import { GradientBar } from "@/components/GradientBar";
 import {
   palette, brand, type as typ, shared, space, radii,
@@ -63,7 +64,15 @@ export default function NetworkingScreen() {
         <CompletionIndicator current={4} />
         <Text style={s.title}>Networking</Text>
 
-        {!hasResult && (
+        {!hasResult && !job && (
+          <EmptyToolState
+            icon="🤝"
+            headline="No networking plan yet"
+            body="Run a Job Fit analysis first. Your outreach plan — who to contact and what to say — will appear here."
+          />
+        )}
+
+        {!hasResult && job && (
           <Text style={s.subtitle}>
             Build your outreach plan — who to contact, what to say, and how to follow up.
           </Text>
@@ -173,8 +182,9 @@ export default function NetworkingScreen() {
                     {hasDetails && (
                       <Pressable onPress={() => toggle(i)} style={s.toggleBtn}>
                         <Text style={s.toggleText}>
-                          {isOpen ? "▾ Hide details" : "▸ More — connection request, email, follow-up"}
+                          {isOpen ? "▾  Hide details" : "▸  Connection request, email, follow-up"}
                         </Text>
+                        {!isOpen && <Text style={s.toggleHint}>Tap to expand</Text>}
                       </Pressable>
                     )}
 
@@ -218,6 +228,52 @@ export default function NetworkingScreen() {
                 </View>
               );
             })}
+
+            {/* ── LinkedIn Search Help ── */}
+            {moves.some((m: any) => Array.isArray(m?.linkedin_search_queries) && m.linkedin_search_queries.length > 0) && (
+              <View style={s.searchCard}>
+                <Pressable onPress={() => toggle(99)} style={s.searchHeader}>
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+                    <Text style={{ fontSize: 16 }}>🔍</Text>
+                    <View>
+                      <Text style={s.searchTitle}>Need help finding these people?</Text>
+                      <Text style={s.searchSub}>Tap for LinkedIn search queries</Text>
+                    </View>
+                  </View>
+                  <Text style={s.searchChevron}>{openSet.has(99) ? "▾" : "▸"}</Text>
+                </Pressable>
+
+                {openSet.has(99) && (
+                  <View style={s.searchBody}>
+                    {moves.map((m: any, i: number) => {
+                      const queries = Array.isArray(m?.linkedin_search_queries) ? m.linkedin_search_queries : [];
+                      if (!queries.length) return null;
+                      const c = STEP_COLORS[i] || STEP_COLORS[2];
+                      return (
+                        <View key={i} style={{ marginBottom: 14 }}>
+                          <Text style={[s.searchStepLabel, { color: c.accent }]}>Step {i + 1}</Text>
+                          {queries.map((q: any, qi: number) => {
+                            const qStr = String(q).trim();
+                            const liUrl = `https://www.linkedin.com/search/results/people/?keywords=${encodeURIComponent(qStr)}`;
+                            return (
+                              <View key={qi} style={s.searchQueryRow}>
+                                <Text style={s.searchQueryText}>{qStr}</Text>
+                                <Pressable
+                                  onPress={() => Linking.openURL(liUrl)}
+                                  style={({ pressed }) => [s.searchGoBtn, pressed && { opacity: 0.7 }]}
+                                >
+                                  <Text style={s.searchGoBtnText}>Search →</Text>
+                                </Pressable>
+                              </View>
+                            );
+                          })}
+                        </View>
+                      );
+                    })}
+                  </View>
+                )}
+              </View>
+            )}
           </View>
         )}
       </ScrollView>
@@ -286,8 +342,17 @@ const s = StyleSheet.create({
   msgText: { fontSize: 14, lineHeight: 22, color: "rgba(255,255,255,0.88)" },
 
   // Toggle
-  toggleBtn: { marginTop: 12 },
-  toggleText: { fontSize: 12, fontWeight: "900", color: palette.dim, letterSpacing: 0.3 },
+  toggleBtn: {
+    marginTop: 14,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderLeftWidth: 2,
+    borderLeftColor: "rgba(254,176,106,0.5)",
+    backgroundColor: "rgba(254,176,106,0.06)",
+    borderRadius: 6,
+  },
+  toggleText: { fontSize: 13, fontWeight: "900", color: brand.orange, letterSpacing: 0.3 },
+  toggleHint: { fontSize: 10, color: palette.dim, marginTop: 2 },
 
   // Details
   details: { marginTop: space.lg, borderTopWidth: 1, borderTopColor: palette.borderSoft, paddingTop: space.lg, gap: space.lg },
@@ -307,4 +372,56 @@ const s = StyleSheet.create({
   openerRow: { flexDirection: "row", alignItems: "flex-start", gap: 10, marginBottom: 8 },
   openerDot: { width: 5, height: 5, borderRadius: 3, marginTop: 7, opacity: 0.6 },
   openerText: { flex: 1, fontSize: 13, lineHeight: 20, color: palette.muted },
+
+  // LinkedIn search help
+  searchCard: {
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
+    backgroundColor: "rgba(255,255,255,0.03)",
+    overflow: "hidden" as const,
+    marginTop: 20,
+  },
+  searchHeader: {
+    flexDirection: "row" as const,
+    alignItems: "center" as const,
+    justifyContent: "space-between" as const,
+    padding: 14,
+  },
+  searchTitle: { fontSize: 13, fontWeight: "800" as const, color: "rgba(255,255,255,0.70)" },
+  searchSub: { fontSize: 11, color: palette.dim, marginTop: 2 },
+  searchChevron: { fontSize: 12, color: palette.dim },
+  searchBody: {
+    padding: 14,
+    paddingTop: 0,
+    borderTopWidth: 1,
+    borderTopColor: "rgba(255,255,255,0.06)",
+  },
+  searchStepLabel: { fontSize: 10, fontWeight: "900" as const, letterSpacing: 0.5, marginBottom: 6, marginTop: 10 },
+  searchQueryRow: {
+    flexDirection: "row" as const,
+    alignItems: "center" as const,
+    gap: 8,
+    marginBottom: 8,
+  },
+  searchQueryText: {
+    flex: 1,
+    fontSize: 13,
+    lineHeight: 19,
+    color: "rgba(255,255,255,0.60)",
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    backgroundColor: "rgba(255,255,255,0.04)",
+    borderRadius: 8,
+    fontFamily: "monospace" as any,
+  },
+  searchGoBtn: {
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    backgroundColor: "rgba(81,173,229,0.12)",
+    borderWidth: 1,
+    borderColor: "rgba(81,173,229,0.30)",
+    borderRadius: 8,
+  },
+  searchGoBtnText: { fontSize: 11, fontWeight: "900" as const, color: brand.blue },
 });

@@ -297,16 +297,17 @@ export async function runJobFit(
  * Run Positioning analysis.
  *
  * POST /api/positioning
- * Body: { job: string }
+ * Body: { job: string, jobfit_result?: JobFitResult | null }
  */
 export async function runPositioning(
   accessToken: string,
   job: string,
+  jobfitResult?: JobFitResult | null,
   onDebug?: (d: DebugInfo) => void
 ): Promise<PositioningResult> {
   return postJsonWithDebug(
     `${API_BASE}/api/positioning`,
-    { job: job.trim() },
+    { job: job.trim(), jobfit_result: jobfitResult ?? null },
     accessToken,
     onDebug
   );
@@ -316,17 +317,18 @@ export async function runPositioning(
  * Run Cover Letter generation.
  *
  * POST /api/coverletter
- * Body: { job: string, jobfit_result?: JobFitResult | null }
+ * Body: { job: string, jobfit_result?: JobFitResult | null, positioning?: PositioningResult | null }
  */
 export async function runCoverLetter(
   accessToken: string,
   job: string,
   jobfitResult?: JobFitResult | null,
+  positioning?: PositioningResult | null,
   onDebug?: (d: DebugInfo) => void
 ): Promise<CoverLetterResult> {
   return postJsonWithDebug(
     `${API_BASE}/api/coverletter`,
-    { job: job.trim(), jobfit_result: jobfitResult ?? null },
+    { job: job.trim(), jobfit_result: jobfitResult ?? null, positioning: positioning ?? null },
     accessToken,
     onDebug
   );

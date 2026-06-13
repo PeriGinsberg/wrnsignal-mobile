@@ -9,9 +9,41 @@ import { CompletionIndicator } from "@/components/CompletionIndicator";
 import { SectionCard } from "@/components/SectionCard";
 import { CopyButton } from "@/components/CopyButton";
 import { GradientBar } from "@/components/GradientBar";
+import { EmptyToolState } from "@/components/EmptyToolState";
 import {
   palette, brand, type as typ, shared, space, radii, gradients,
 } from "@/constants/theme";
+
+const TEAL = "#218C8C";
+
+const STOP_WORDS = new Set([
+  "a","an","the","and","or","but","to","of","in","on","for","with",
+  "at","by","from","as","is","are","was","were","be","been","being",
+  "this","that","these","those","it","its","you","your","we","our","i",
+]);
+
+function normWord(w: string) {
+  return w.toLowerCase().replace(/^[^a-z0-9]+|[^a-z0-9]+$/gi, "").trim();
+}
+
+function DiffText({ before, after }: { before: string; after: string }) {
+  const beforeWords = new Set(
+    (before || "").split(/\s+/).map(normWord).filter((w) => w && w.length >= 4 && !STOP_WORDS.has(w))
+  );
+  const parts = (after || "").split(/(\b[\w'/-]+\b)/g);
+  return (
+    <Text style={{ fontSize: 13, lineHeight: 20, color: "rgba(255,255,255,0.88)" }}>
+      {parts.map((p, i) => {
+        if (!p || !/[\w'/-]/.test(p)) return <Text key={i}>{p}</Text>;
+        const w = normWord(p);
+        const isNew = !!w && w.length >= 4 && !STOP_WORDS.has(w) && !beforeWords.has(w);
+        return isNew
+          ? <Text key={i} style={{ fontWeight: "900", color: TEAL }}>{p}</Text>
+          : <Text key={i}>{p}</Text>;
+      })}
+    </Text>
+  );
+}
 
 /* ── helpers ─────────────────────────────────────────────────── */
 
@@ -31,7 +63,7 @@ function pickText(obj: any, keys: string[]): string {
 
 export default function PositioningScreen() {
   const { accessToken } = useAuth();
-  const { job, positioningResult, setPositioningResult } = useJob();
+  const { job, jobFitResult, positioningResult, setPositioningResult } = useJob();
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -42,14 +74,14 @@ export default function PositioningScreen() {
     setError(null);
     setLoading(true);
     try {
-      const result = await apiRunPositioning(accessToken, job);
+      const result = await apiRunPositioning(accessToken, job, jobFitResult);
       setPositioningResult(result);
     } catch (e: any) {
       setError(e?.message || "Something went wrong.");
     } finally {
       setLoading(false);
     }
-  }, [job, accessToken]);
+  }, [job, accessToken, jobFitResult]);
 
   const r = positioningResult?.result ?? positioningResult ?? null;
   const hasResult = !!r;
@@ -70,13 +102,18 @@ export default function PositioningScreen() {
     };
   }).filter((x) => (x.before || x.after) && x.before !== x.after);
 
-  const drivers: string[] = hasResult
+  const driversRaw: string[] = hasResult
     ? (Array.isArray((r as any)?.primary_match_drivers) ? (r as any).primary_match_drivers
       : Array.isArray((r as any)?.primaryMatchDrivers) ? (r as any).primaryMatchDrivers
       : Array.isArray((r as any)?.role_angle?.evidence) ? (r as any).role_angle.evidence
       : []
     ).map(toSafeLine).filter(Boolean)
     : [];
+  // Filter out metadata lines that aren't real competitive signals
+  const drivers = driversRaw.filter((d) => {
+    const l = d.toLowerCase();
+    return !(l.startsWith("name:") || l.startsWith("job type") || l.startsWith("target role") || l.startsWith("target location") || l.startsWith("preferred location") || l.startsWith("location:") || l.startsWith("timeline:") || l.startsWith("resume:") || l.includes(": full time") || l.includes(": part time") || l.includes(": internship") || d.length < 15);
+  });
 
   const summary = hasResult ? ((r as any)?.summary_statement ?? (r as any)?.summaryStatement ?? null) : null;
   const summaryText = typeof summary === "string" ? summary.trim()
@@ -90,7 +127,15 @@ export default function PositioningScreen() {
         <CompletionIndicator current={2} />
         <Text style={s.title}>Positioning</Text>
 
-        {!hasResult && (
+        {!hasResult && !job && (
+          <EmptyToolState
+            icon="✏️"
+            headline="No analysis yet"
+            body="Run a Job Fit analysis first. Your resume positioning will appear here — rewritten bullets specific to the role you're targeting."
+          />
+        )}
+
+        {!hasResult && job && (
           <Text style={s.subtitle}>
             Rewrite your resume bullets to match the exact language this hiring manager is scanning for.
           </Text>
@@ -147,8 +192,8 @@ export default function PositioningScreen() {
                     </View>
                     {/* After */}
                     <View style={[s.editHalf, s.editAfterBg]}>
-                      <Text style={s.editAfterLabel}>AFTER — COPY THIS</Text>
-                      <Text style={s.editAfter}>{b.after || "—"}</Text>
+                      <Text style={s.editAfterLabel}>AFTER</Text>
+                      {b.after ? <DiffText before={b.before || ""} after={b.after} /> : <Text style={s.editAfter}>—</Text>}
                       {b.after && <CopyButton text={b.after} label="Copy bullet" />}
                     </View>
                     {/* Why */}
@@ -202,7 +247,7 @@ export default function PositioningScreen() {
                 icon="✦"
                 iconBg="rgba(74,222,128,0.12)"
                 iconColor="#4ade80"
-                title="Why These Changes Work"
+                title="How to Beat the Competition"
                 titleColor="#4ade80"
                 subtitle="Mention these in your cover letter and interview"
                 badge={`${drivers.length} signals`}

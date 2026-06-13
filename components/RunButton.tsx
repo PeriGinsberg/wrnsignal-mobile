@@ -1,5 +1,6 @@
 import { Pressable, Text, ActivityIndicator, StyleSheet, View } from "react-native";
 import { brand, radii, palette } from "@/constants/theme";
+import { QuoteRotator } from "./QuoteRotator";
 
 type Props = {
   label: string;
@@ -29,6 +30,7 @@ export function RunButton({ label, onPress, loading, loadingHint }: Props) {
       {loading && loadingHint && (
         <Text style={styles.hint}>{loadingHint}</Text>
       )}
+      <QuoteRotator visible={loading} />
     </View>
   );
 }
