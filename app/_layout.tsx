@@ -9,6 +9,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 
 import { AuthProvider, useAuth } from "@/lib/auth-context";
 import { JobProvider } from "@/lib/job-context";
+import { configurePurchases } from "@/lib/iap";
 import AnimatedSplash from "@/components/AnimatedSplash";
 
 export { ErrorBoundary } from "expo-router";
@@ -30,6 +31,13 @@ export default function RootLayout() {
       SplashScreen.hideAsync();
     }
   }, [loaded]);
+
+  // Initialize RevenueCat once at startup, before any purchase call. Empty
+  // deps → runs a single time on mount. configurePurchases swallows its own
+  // errors (logs [iap] configure_failed), so this never blocks app boot.
+  useEffect(() => {
+    configurePurchases();
+  }, []);
 
   if (!loaded) {
     return null;
