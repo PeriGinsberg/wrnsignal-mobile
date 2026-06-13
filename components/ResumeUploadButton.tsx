@@ -32,14 +32,12 @@ export function ResumeUploadButton({ onTextExtracted }: Props) {
       if (result.canceled || !result.assets?.length) return;
 
       const file = result.assets[0];
-      if (!accessToken) {
-        setError("Please log in again.");
-        return;
-      }
 
+      // accessToken is null for anonymous (trial) users — that's fine,
+      // /api/resume-upload accepts anonymous uploads (auth optional).
       setUploading(true);
       const text = await uploadResume(
-        accessToken,
+        accessToken ?? null,
         file.uri,
         file.name,
         file.mimeType || "application/octet-stream"

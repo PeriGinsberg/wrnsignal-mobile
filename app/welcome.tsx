@@ -17,7 +17,7 @@ export default function WelcomeScreen() {
   const [restoring, setRestoring] = useState(false);
 
   function handleFreeScan() {
-    Alert.alert("Coming soon", "Free scans on mobile coming in the next update.");
+    router.push("/trial" as any);
   }
 
   function handleBuy() {

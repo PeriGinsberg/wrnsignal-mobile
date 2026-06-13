@@ -80,12 +80,16 @@ function AuthGate() {
     const onLoginScreen = firstSegment === "login";
     const onAboutScreen = firstSegment === "about";
     const onWelcomeScreen = (firstSegment as string) === "welcome";
+    const onTrialScreen = (firstSegment as string) === "trial";
+    const onTrialResultsScreen = (firstSegment as string) === "trial-results";
     const onRootIndex = firstSegment === undefined;
 
     if (!session) {
       // No session — route to welcome (never logged in) or login (returning
-      // user). /about stays registered as a fallback during cleanup.
-      if (!onLoginScreen && !onAboutScreen && !onWelcomeScreen) {
+      // user). /about stays registered as a fallback during cleanup. The
+      // trial screens are anonymous-accessible, so leave session-less users
+      // on them.
+      if (!onLoginScreen && !onAboutScreen && !onWelcomeScreen && !onTrialScreen && !onTrialResultsScreen) {
         if (hasLoggedInBefore === "true") {
           router.replace("/login");
         } else {
@@ -93,8 +97,9 @@ function AuthGate() {
         }
       }
     } else {
-      // Logged in — route into the app from the entry screens.
-      if (onLoginScreen || onAboutScreen || onWelcomeScreen || onRootIndex) {
+      // Logged in — route into the app from the entry screens (incl. the
+      // anonymous trial screens, which a logged-in user shouldn't sit on).
+      if (onLoginScreen || onAboutScreen || onWelcomeScreen || onTrialScreen || onTrialResultsScreen || onRootIndex) {
         router.replace("/(tabs)/tracker");
       }
     }
@@ -107,6 +112,8 @@ function AuthGate() {
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="login" options={{ gestureEnabled: false }} />
         <Stack.Screen name="welcome" options={{ gestureEnabled: false }} />
+        <Stack.Screen name="trial" options={{ gestureEnabled: false }} />
+        <Stack.Screen name="trial-results" options={{ animation: "slide_from_right" }} />
         <Stack.Screen name="about" />
         <Stack.Screen
           name="instructions"

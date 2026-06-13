@@ -674,7 +674,7 @@ export async function getInterviews(
  * Uploads a PDF, DOCX, or TXT file and returns extracted text.
  */
 export async function uploadResume(
-  accessToken: string,
+  accessToken: string | null,
   fileUri: string,
   fileName: string,
   mimeType: string
@@ -686,11 +686,14 @@ export async function uploadResume(
     type: mimeType,
   } as any);
 
+  // Auth is optional — the trial flow uploads anonymously. /api/resume-upload
+  // only validates a Bearer when one is present; it stores nothing.
+  const headers: Record<string, string> = {};
+  if (accessToken) headers.Authorization = `Bearer ${accessToken}`;
+
   const res = await fetch(`${API_BASE}/api/resume-upload`, {
     method: "POST",
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-    },
+    headers,
     body: formData,
   });
 
